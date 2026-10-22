@@ -53,7 +53,7 @@ class DialEditor(QWidget):
         super().__init__(parent)
         form = QFormLayout(self)
         self.mode = QComboBox()
-        for title, value in [('System volume', 'sys_vol'), ('Application volume', 'app_vol'), ('Brightness', 'brightness'), ('Custom shortcuts', 'hotkeys'), ('Vertical scroll', 'scroll'), ('Horizontal scroll', 'horizontal'), ('Zoom (+ / - shortcuts)', 'zoom')]:
+        for title, value in [('System volume', 'sys_vol'), ('Editing transport (Jog / Shuttle / Scroll)', 'transport'), ('Application volume', 'app_vol'), ('Brightness', 'brightness'), ('Custom shortcuts', 'hotkeys'), ('Vertical scroll', 'scroll'), ('Horizontal scroll', 'horizontal'), ('Zoom (+ / - shortcuts)', 'zoom')]:
             self.mode.addItem(title, value)
         self.hardware = QComboBox()
         self.hardware.addItems(['Jog', 'Shuttle', 'Scroll'])
@@ -77,6 +77,36 @@ class DialEditor(QWidget):
         form.addRow(self.app_label, self.app)
         form.addRow(self.left_label, self.left)
         form.addRow(self.right_label, self.right)
+        self.transport_fields = {}
+        self.transport_rows = []
+        for key, title, default in [('transport_app', 'Editor executable', 'Resolve.exe'),
+                                    ('jog_left', 'Previous frame', 'left'), ('jog_right', 'Next frame', 'right'),
+                                    ('reverse_key', 'Play reverse', 'j'), ('stop_key', 'Stop playback', 'k'),
+                                    ('forward_key', 'Play forward', 'l')]:
+            widget = QLineEdit(default) if key == 'transport_app' else ShortcutInput(default)
+            label = QLabel(title)
+            form.addRow(label, widget)
+            self.transport_fields[key] = widget
+            self.transport_rows += [label, widget]
+        for key, title, low, high, default in [('jog_units', 'Dial units per frame', 1, 2048, 128),
+                                              ('scroll_frames', 'Scroll frames per step', 1, 20, 10),
+                                              ('deadzone', 'Shuttle neutral zone', 32, 2048, 256),
+                                              ('shuttle_width', 'Shuttle units per speed', 128, 4096, 768),
+                                              ('max_level', 'Maximum J/L presses (1–4)', 1, 4, 4)]:
+            widget = QSpinBox()
+            widget.setRange(low, high)
+            widget.setValue(default)
+            label = QLabel(title)
+            form.addRow(label, widget)
+            self.transport_fields[key] = widget
+            self.transport_rows += [label, widget]
+        self.transport_hint = QLabel('JOG / SHTL / SCRL select the mode; their LEDs follow it. STOP/PLAY toggles playback. '
+            'Shuttle neutral is the position where you select SHTL: return there to stop, or press STOP/PLAY. '
+            'Re-select SHTL to stop and re-centre. Scroll advances several frames per step. '
+            'Select the timeline/viewer in your editor before turning. This uses shortcuts, not native Resolve integration.')
+        self.transport_hint.setWordWrap(True)
+        form.addRow(self.transport_hint)
+        self.transport_rows.append(self.transport_hint)
         self.mode.currentIndexChanged.connect(self.visibility)
         self.visibility()
 
@@ -86,6 +116,9 @@ class DialEditor(QWidget):
         self.app_label.setVisible(mode == 'app_vol')
         for widget in (self.left, self.right, self.left_label, self.right_label):
             widget.setVisible(mode == 'hotkeys')
+        for widget in self.transport_rows:
+            widget.setVisible(mode == 'transport')
+        self.acceleration.setVisible(mode != 'transport')
 
     def load(self, action):
         self.mode.setCurrentIndex(max(0, self.mode.findData(action.get('mode') or action.get('action', 'sys_vol'))))
@@ -94,6 +127,17 @@ class DialEditor(QWidget):
         self.step.setValue(action.get('step', 1))
         self.acceleration.setChecked(action.get('acceleration', False))
         self.app.setText(action.get('app', ''))
+        defaults = {'transport_app': 'Resolve.exe', 'jog_left': 'left', 'jog_right': 'right',
+                    'reverse_key': 'j', 'stop_key': 'k', 'forward_key': 'l', 'jog_units': 128,
+                    'scroll_frames': 10, 'deadzone': 256, 'shuttle_width': 768, 'max_level': 4}
+        for key, widget in self.transport_fields.items():
+            value = action.get(key, defaults[key])
+            if isinstance(widget, ShortcutInput):
+                widget.text.setText(value)
+            elif isinstance(widget, QSpinBox):
+                widget.setValue(value)
+            else:
+                widget.setText(value)
         for direction in ('left', 'right'):
             value = action.get(direction, {})
             getattr(self, direction).text.setText(value if isinstance(value, str) else value.get('keys', ''))
@@ -107,6 +151,19 @@ class DialEditor(QWidget):
         if value['action'] == 'app_vol' and not value['app']:
             raise ValueError('Choose an application name or use @foreground.')
         from actions.hotkey import parse_hotkey
+        if value['action'] == 'transport':
+            for key, widget in self.transport_fields.items():
+                if isinstance(widget, ShortcutInput):
+                    shortcut = widget.text.text().strip()
+                    if not parse_hotkey(shortcut):
+                        raise ValueError('Each transport shortcut must contain a key.')
+                    value[key] = shortcut
+                elif isinstance(widget, QSpinBox):
+                    value[key] = widget.value()
+                else:
+                    value[key] = widget.text().strip()
+            if not value['transport_app'] or any(c in value['transport_app'] for c in '/\\:'):
+                raise ValueError('Enter the editor executable name, such as Resolve.exe.')
         if value['action'] == 'hotkeys':
             for direction in ('left', 'right'):
                 parse_hotkey(value[direction]['keys'])
@@ -469,7 +526,7 @@ class DesktopTab(QWidget):
         form = QFormLayout()
         form.addRow('Other applications use', self.fallback)
         layout.addLayout(form)
-        for title, name, default in [('Close the window to the tray', 'close_to_tray', True), ('Show profile / dial changes on screen', 'overlay', True)]:
+        for title, name, default in [('Close the window to the tray', 'close_to_tray', True), ('Show profile / dial changes on screen', 'overlay', True), ('Controller LED feedback', 'led_feedback', True)]:
             checkbox = QCheckBox(title)
             checkbox.setChecked(self.config['desktop'].get(name, default))
             checkbox.toggled.connect(lambda value, name=name: self.option(name, value))
@@ -494,6 +551,7 @@ class DesktopTab(QWidget):
     def option(self, name, value):
         self.config['desktop'][name] = value
         cfg.save(self.config)
+        self.controller.refresh()
 
     def startup(self, enabled):
         try:

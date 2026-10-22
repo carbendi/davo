@@ -13,7 +13,7 @@ def foreground():
         return {'exe': '', 'title': ''}
     try:
         _, pid = win32process.GetWindowThreadProcessId(hwnd)
-        return {'exe': psutil.Process(pid).name(), 'title': win32gui.GetWindowText(hwnd)}
+        return {'exe': psutil.Process(pid).name(), 'title': win32gui.GetWindowText(hwnd), 'hwnd': hwnd}
     except (psutil.Error, OSError):
         return {'exe': '', 'title': ''}
 

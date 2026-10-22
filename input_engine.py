@@ -3,6 +3,7 @@
 import copy
 import time
 import threading
+from transport import Transport
 
 
 def synchronized(method):
@@ -30,6 +31,7 @@ class InputEngine:
         self.accum = {}
         self.last_turn = 0.0
         self.last_shuttle = 0.0
+        self.transport = Transport(perform)
 
     @property
     def layer(self):
@@ -59,6 +61,8 @@ class InputEngine:
 
     @synchronized
     def reset(self):
+        self.transport.stop()
+        self.transport.configure({})
         for key in list(self.refs):
             self.release(key)
         self.refs.clear()
@@ -79,6 +83,7 @@ class InputEngine:
         self.physical.clear()
 
     def keys_changed(self, buttons):
+        transport = self.transport.configure(self._dial_source())
         buttons = set(buttons)
         released, pressed = self.physical - buttons, buttons - self.physical
         self.physical = buttons
@@ -101,6 +106,12 @@ class InputEngine:
                     else:
                         self._tap(button, mapping)
         for button in sorted(pressed):
+            if transport and not self.paused and button in (*Transport.BUTTONS, 'STOP_PLAY'):
+                if button == 'STOP_PLAY':
+                    self.transport.play_stop()
+                else:
+                    self.transport.select(Transport.BUTTONS[button])
+                continue
             if self.paused and self.mapping(button).get('action') != 'pause':
                 continue
             mapping = self.mapping(button)
@@ -111,6 +122,7 @@ class InputEngine:
         self.changed()
 
     def tick(self):
+        self.transport.configure(self._dial_source())
         now = self.clock()
         for button, state in list(self.active.items()):
             long = state['action'].get('long_press', {})
@@ -128,6 +140,8 @@ class InputEngine:
         self._release_action(button, action)
 
     def _release_action(self, button, action):
+        if button in self.temporary_layers or button in self.temporary_dials:
+            self.transport.stop()
         if action.get('action') == 'hold_key':
             self.keys(action.get('keys', ''), False)
         if action.get('action') == 'overlay_hold':
@@ -138,6 +152,8 @@ class InputEngine:
 
     def execute(self, button, action):
         kind = action.get('action', 'none')
+        if kind in ('layer_push', 'layer_hold', 'layer_pop', 'dial_mode', 'dial_hold'):
+            self.transport.stop()
         if kind == 'hold_key':
             self.keys(action.get('keys', ''), True)
         elif kind == 'toggle_hold':
@@ -177,12 +193,25 @@ class InputEngine:
             self.perform(copy.deepcopy(action))
         self.changed()
 
-    def dial_source(self):
+    def _dial_source(self):
         if self.temporary_dials:
             return next(reversed(self.temporary_dials.values()))
         return self.dial_override or self.config['layers'].get(self.layer, {}).get('dial_default', {'action': 'sys_vol', 'hw_mode': 'Jog', 'sensitivity': 100})
 
+    def dial_source(self):
+        source = self._dial_source()
+        if (source.get('mode') or source.get('action')) == 'transport':
+            return dict(source, hw_mode=self.transport.mode)
+        return source
+
     def jog(self, mode, value):
+        if self.transport.configure(self._dial_source()):
+            if not self.paused:
+                previous = (self.transport.level, self.transport.playing)
+                self.transport.turn(mode, value)
+                if previous != (self.transport.level, self.transport.playing):
+                    self.changed()
+            return
         if self.paused or not value:
             return
         now = self.clock()

@@ -31,6 +31,10 @@ class DesktopController(QObject):
         self._profile_locked = False
         self._last_state = None
         self._device = None
+        self._device_ready = False
+        self._hardware_state = None
+        self._transport_window = None
+        self._pending_stops = {}
         self._quitting = False
         self.engine = InputEngine(self.config, self.perform, hotkey.press_keys, hotkey.release_keys, self.changed)
         self.device_event.connect(self.on_event)
@@ -45,7 +49,7 @@ class DesktopController(QObject):
         self.overlay_timer.timeout.connect(self.overlay.hide)
         self.gesture_timer = QTimer(self)
         self.gesture_timer.setInterval(20)
-        self.gesture_timer.timeout.connect(self.engine.tick)
+        self.gesture_timer.timeout.connect(self.tick)
         self.gesture_timer.start()
         self.profile_timer = QTimer(self)
         self.profile_timer.setInterval(400)
@@ -87,6 +91,24 @@ class DesktopController(QObject):
     def changed(self):
         self.updated.emit()
 
+    def tick(self):
+        try:
+            self.engine.tick()
+            transport = self.engine.transport
+            if transport.playing or self._pending_stops:
+                foreground = windows_tools.foreground()
+                target = (foreground.get('exe', '').casefold(), foreground.get('hwnd'))
+                if transport.playing and self._transport_window != target:
+                    transport.suspend()
+                    self.message('Transport stopped sending keys after the editor lost focus. '
+                                 'A stop is pending until its window regains focus; playback may continue meanwhile.')
+                    self.refresh()
+                if target in self._pending_stops and not self.engine.refs:
+                    self.send_shortcut(self._pending_stops.pop(target))
+            self.sync_hardware()
+        except Exception as exc:
+            self.message(f'Controller: {exc}')
+
     def on_event(self, event):
         kind, data = event
         try:
@@ -97,8 +119,14 @@ class DesktopController(QObject):
             elif kind == 'jog':
                 self.engine.jog(*data)
             elif kind == 'disconnect':
+                self._device_ready = False
+                self._hardware_state = None
                 self.cancel_macros()
                 self.engine.disconnected()
+            elif kind == 'ready' and data is self._device:
+                self._device_ready = True
+                self._hardware_state = None
+                self.sync_hardware()
             elif kind == 'status':
                 self.window._on_device_status(data)
         except Exception as exc:
@@ -115,6 +143,7 @@ class DesktopController(QObject):
                 device.on_key = lambda keys: self.device_event.emit(('keys', [k.name for k in keys]))
                 device.on_jog = lambda mode, value: self.device_event.emit(('jog', (modes.get(mode, 'jog'), value)))
                 device.authenticate()
+                self.device_event.emit(('ready', device))
                 self.device_event.emit(('status', 'Connected'))
                 device.run(self.stop_event)
             except Exception as exc:
@@ -122,6 +151,11 @@ class DesktopController(QObject):
                     self.device_event.emit(('status', f'Not connected: {exc}'))
             finally:
                 if device:
+                    try:
+                        device.set_leds(0)
+                        device.set_jog_leds(0)
+                    except OSError:
+                        pass
                     device.close()
                 self._device = None
                 self.device_event.emit(('disconnect', None))
@@ -133,7 +167,28 @@ class DesktopController(QObject):
 
     def perform(self, action):
         kind = action.get('action')
-        if kind in ('overlay', 'overlay_hold'):
+        if kind == 'transport_keys':
+            foreground = windows_tools.foreground()
+            target = (foreground.get('exe', '').casefold(), foreground.get('hwnd'))
+            shortcuts = action['shortcuts']
+            if (target[0] != action.get('app', 'Resolve.exe').casefold() or self.engine.refs
+                    or (action.get('stop_only') and self._transport_window and target != self._transport_window)):
+                if self._transport_window:
+                    source = self.engine.transport.source or {}
+                    self._pending_stops[self._transport_window] = source.get('stop_key', 'k')
+                return False
+            if target in self._pending_stops:
+                self.send_shortcut(self._pending_stops.pop(target))
+            self._transport_window = target
+            for shortcut in shortcuts:
+                # Never spill a sequence into a newly focused application/window.
+                current = windows_tools.foreground()
+                if (current.get('exe', '').casefold(), current.get('hwnd')) != target:
+                    self._pending_stops[target] = (self.engine.transport.source or {}).get('stop_key', 'k')
+                    return False
+                self.send_shortcut(shortcut)
+            return True
+        elif kind in ('overlay', 'overlay_hold'):
             self.show_mappings(hold=kind == 'overlay_hold')
         elif kind == 'hide_overlay':
             self.overlay.hide()
@@ -271,8 +326,9 @@ class DesktopController(QObject):
             self.message(f'Profile selection: {exc}')
 
     def refresh(self):
+        self.sync_hardware()
         layer = self.engine.layer
-        state = (self.config.get('active_profile'), layer, self.engine.paused, tuple(self.engine.latched.items()), str(self.engine.dial_source()))
+        state = (self.config.get('active_profile'), layer, self.engine.paused, tuple(self.engine.latched.items()), str(self.engine.dial_source()), self.engine.transport.level, self.engine.transport.playing)
         if state == self._last_state:
             return
         self._last_state = state
@@ -282,6 +338,11 @@ class DesktopController(QObject):
         name = self.config['layers'].get(layer, {}).get('name', layer)
         mode = self.engine.dial_source().get('mode') or self.engine.dial_source().get('action', 'sys_vol')
         text = f'{profile} / {name} | Dial: {mode}'
+        if mode == 'transport':
+            transport = self.engine.transport
+            speed = (2 ** (abs(transport.level)-1)) if transport.playing else 0
+            direction = 'reverse' if transport.level < 0 else 'forward'
+            text += f' / {transport.mode} / {speed}x {direction}' if speed else f' / {transport.mode} / stopped'
         if self.engine.latched:
             text += ' | Held: '+', '.join(self.engine.latched.values())
         if self.engine.paused:
@@ -297,6 +358,37 @@ class DesktopController(QObject):
             action.triggered.connect(lambda checked=False, pid=pid: self.switch_profile(pid))
         if self.config['desktop'].get('overlay', True) and not self.smoke:
             self.show_overlay(text)
+
+    def sync_hardware(self):
+        if self.smoke or not self._device_ready or self._device is None:
+            return
+        from hid_layer import Led, JogLed, JogMode
+        self.engine.transport.configure(self.engine._dial_source())
+        mode = self.engine.dial_source().get('hw_mode', 'Jog')
+        feedback = self.config['desktop'].get('led_feedback', True) and not self.engine.paused
+        dial_led = {'Jog': JogLed.JOG, 'Shuttle': JogLed.SHTL, 'Scroll': JogLed.SCRL}.get(mode, JogLed.JOG) if feedback else 0
+        leds = 0
+        if feedback:
+            for name in set(self.engine.active) | set(self.engine.latched):
+                state = self.engine.active.get(name, {})
+                if name in self.engine.latched or state.get('action', {}).get('action', 'none') != 'none':
+                    leds |= int(getattr(Led, name, 0))
+        state = (id(self._device), mode, self.engine.transport.epoch, int(dial_led), leds)
+        previous = self._hardware_state
+        if state == previous:
+            return
+        try:
+            if previous is None or state[:3] != previous[:3]:
+                self._device.set_jog_mode({'Jog': JogMode.RELATIVE, 'Shuttle': JogMode.ABSOLUTE_DEADZERO,
+                                           'Scroll': JogMode.RELATIVE_2}.get(mode, JogMode.RELATIVE))
+            if previous is None or state[3] != previous[3]:
+                self._device.set_jog_leds(dial_led)
+            if previous is None or state[4] != previous[4]:
+                self._device.set_leds(leds)
+            self._hardware_state = state
+        except OSError as exc:
+            self._device_ready = False
+            self.message(f'Controller feedback failed: {exc}. Reconnect the controller.')
 
     def show_overlay(self, text, duration=1500):
         self.overlay.setText(text)
@@ -343,9 +435,9 @@ class DesktopController(QObject):
         QApplication.instance().quit()
 
     def shutdown(self):
-        self.stop_event.set()
         self.cancel_macros()
         self.engine.reset()
+        self.stop_event.set()
         self.overlay.hide()
         self.tray.hide()
         if hasattr(self, 'hid_worker'):

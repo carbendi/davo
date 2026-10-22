@@ -217,13 +217,20 @@ class SpeedEditor:
     # ------------------------------------------------------------------
 
     def set_leds(self, leds: Led):
-        self.dev.write(struct.pack('<BI', 2, int(leds)))
+        self._write(struct.pack('<BI', 2, int(leds)))
 
     def set_jog_leds(self, jog_leds: JogLed):
-        self.dev.write(struct.pack('<BB', 4, int(jog_leds)))
+        self._write(struct.pack('<BB', 4, int(jog_leds)))
 
     def set_jog_mode(self, mode: JogMode):
-        self.dev.write(struct.pack('<BBIB', 3, int(mode), 0, 255))
+        self._write(struct.pack('<BBIB', 3, int(mode), 0, 255))
+
+    def _write(self, report):
+        with self._io_lock:
+            if self._closed or self.dev is None:
+                raise OSError('Controller disconnected')
+            if self.dev.write(report) < 0:
+                raise OSError('Controller rejected output report')
 
     # ------------------------------------------------------------------
     # Report parsing

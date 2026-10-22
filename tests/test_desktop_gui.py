@@ -3,7 +3,7 @@ import os
 import tempfile
 import unittest
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import patch, MagicMock
 
 
 @unittest.skipUnless(importlib.util.find_spec('PyQt6'), 'GUI dependencies not installed')
@@ -102,3 +102,63 @@ class DesktopGuiTests(unittest.TestCase):
         panel.dial.load({'action': 'hotkeys', 'left': {'keys': '['}, 'right': {'keys': ']'}})
         panel.save()
         self.assertEqual(self.controller.engine.dial_source()['action'], 'hotkeys')
+
+    def test_transport_editor_round_trip(self):
+        from desktop_ui import DialEditor
+        editor = DialEditor()
+        action = {'action': 'transport', 'hw_mode': 'Shuttle', 'transport_app': 'Resolve.exe',
+                  'deadzone': 320, 'shuttle_width': 1024, 'jog_units': 256, 'max_level': 3,
+                  'scroll_frames': 8, 'reverse_key': 'j', 'stop_key': 'k', 'forward_key': 'l'}
+        editor.load(action)
+        result = editor.value()
+        for key, value in action.items():
+            self.assertEqual(result[key], value)
+
+    def test_focus_loss_never_sends_stop_into_another_application(self):
+        controller = self.controller
+        controller.config['layers']['default']['dial_default'] = {'action': 'transport', 'hw_mode': 'Shuttle'}
+        editor = {'exe': 'Resolve.exe', 'hwnd': 1}
+        other = {'exe': 'notepad.exe', 'hwnd': 2}
+        with patch('desktop_runtime.windows_tools.foreground', return_value=editor) as foreground, patch.object(controller, 'send_shortcut') as send:
+            controller.engine.jog('shuttle', 400)
+            self.assertTrue(controller.engine.transport.playing)
+            send.reset_mock()
+            foreground.return_value = other
+            controller.tick()
+            send.assert_not_called()
+            self.assertFalse(controller.engine.transport.playing)
+            self.assertIn(('resolve.exe', 1), controller._pending_stops)
+            foreground.return_value = editor
+            controller.tick()
+            send.assert_called_once_with('k')
+            self.assertFalse(controller._pending_stops)
+
+    def test_hardware_mode_leds_and_reconnect(self):
+        from hid_layer import JogMode, JogLed, Led
+        controller = self.controller
+        controller.smoke = False
+        self.addCleanup(setattr, controller, 'smoke', True)
+        device = MagicMock()
+        controller._device, controller._device_ready = device, True
+        controller.config['layers']['default']['dial_default'] = {'action': 'transport'}
+        controller.sync_hardware()
+        device.set_jog_mode.assert_called_with(JogMode.RELATIVE)
+        device.set_jog_leds.assert_called_with(JogLed.JOG)
+        controller.engine.keys_changed(['SHTL'])
+        device.set_jog_mode.assert_called_with(JogMode.ABSOLUTE_DEADZERO)
+        device.set_jog_leds.assert_called_with(JogLed.SHTL)
+        controller.engine.keys_changed([])
+        count = device.set_jog_mode.call_count
+        controller.engine.keys_changed(['SHTL'])
+        self.assertEqual(device.set_jog_mode.call_count, count+1)
+        controller.config['layers']['default']['buttons']['CUT'] = {'action': 'toggle_hold', 'keys': 'ctrl'}
+        with patch.object(controller.engine, 'press'), patch.object(controller.engine, 'release'):
+            controller.engine.keys_changed(['CUT'])
+            controller.engine.keys_changed([])
+            device.set_leds.assert_called_with(int(Led.CUT))
+            controller.toggle_pause()
+            device.set_leds.assert_called_with(0)
+            device.set_jog_leds.assert_called_with(0)
+        controller._hardware_state = None
+        controller.sync_hardware()
+        self.assertGreaterEqual(device.set_jog_mode.call_count, count+2)
