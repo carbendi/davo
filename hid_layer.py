@@ -148,6 +148,8 @@ class SpeedEditor:
         self.dev = hid.device()
         self.dev.open(self.USB_VID, self.USB_PID)
         self._reauth_timer: Optional[threading.Timer] = None
+        self._io_lock = threading.RLock()
+        self._closed = False
 
         # Callbacks — assign these before calling run()
         self.on_key:     Optional[Callable[[List[Key]], None]] = None
@@ -155,16 +157,25 @@ class SpeedEditor:
         self.on_battery: Optional[Callable[[bool, int], None]] = None
 
     def close(self):
+        self._closed = True
         if self._reauth_timer:
             self._reauth_timer.cancel()
-        self.dev.close()
-        self.dev = None
+        with self._io_lock:
+            if self.dev is not None:
+                self.dev.close()
+                self.dev = None
 
     # ------------------------------------------------------------------
     # Authentication
     # ------------------------------------------------------------------
 
     def authenticate(self):
+        with self._io_lock:
+            if self._closed:
+                return
+            return self._authenticate()
+
+    def _authenticate(self):
         # Reset auth state machine
         self.dev.send_feature_report(b'\x06\x00\x00\x00\x00\x00\x00\x00\x00\x00')
 
@@ -195,9 +206,10 @@ class SpeedEditor:
         print(f'[auth] Authenticated. Re-auth in {timeout - 10}s.')
 
         # Schedule re-authentication before timeout
-        self._reauth_timer = threading.Timer(timeout - 10, self.authenticate)
+        self._reauth_timer = threading.Timer(max(1, timeout - 10), self.authenticate)
         self._reauth_timer.daemon = True
-        self._reauth_timer.start()
+        if not self._closed:
+            self._reauth_timer.start()
         return timeout
 
     # ------------------------------------------------------------------
@@ -242,13 +254,13 @@ class SpeedEditor:
     # Main loop
     # ------------------------------------------------------------------
 
-    def run(self):
+    def run(self, stop_event=None):
         handlers = {
             0x03: self._handle_03,
             0x04: self._handle_04,
             0x07: self._handle_07,
         }
-        while True:
+        while not self._closed and (stop_event is None or not stop_event.is_set()):
             report = self.dev.read(64, 1000)
             if not report:
                 continue

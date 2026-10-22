@@ -33,6 +33,19 @@ jobs:
       - name: Build
         run: python -m PyInstaller build.spec --clean
 
+      - name: Scan bundle with Defender when the runner provides it
+        shell: pwsh
+        run: |
+          $status = Get-MpComputerStatus -ErrorAction SilentlyContinue
+          if ($status -and $status.AntivirusEnabled -and $status.AMServiceEnabled) {
+            Start-MpScan -ScanType CustomScan -ScanPath "$PWD\dist\SpeedEditorCustomizer" -ErrorAction Stop
+            $detections = Get-MpThreatDetection | Where-Object { ($_.Resources -join ' ') -match 'SpeedEditorCustomizer' }
+            if ($detections) { $detections | Format-List; throw 'Defender detected a threat in the build.' }
+            Write-Output 'DEFENDER_SCAN_RESULT=completed; no bundle detections reported'
+          } else {
+            Write-Output 'DEFENDER_SCAN_RESULT=unavailable on this runner; no antivirus clearance claimed'
+          }
+
       - name: Smoke-test packaged GUI without a controller
         shell: pwsh
         run: |
@@ -57,6 +70,7 @@ jobs:
         with:
           name: SpeedEditorCustomizer-Windows
           path: dist/SpeedEditorCustomizer-Windows.zip
+          retention-days: 14
 
   # ---------------------------------------------------------------------------
   # macOS Apple Silicon — arm64, native on M1/M2/M3 Macs

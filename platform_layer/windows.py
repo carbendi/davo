@@ -122,6 +122,7 @@ def list_windows() -> list[str]:
 # ---------------------------------------------------------------------------
 
 VK_CODES = {
+    "plus": 0xBB, "equal": 0xBB, "minus": 0xBD,
     "ctrl":       0x11,  "shift":     0x10,  "alt":       0xA4,
     "win":        0x5B,  "enter":     0x0D,  "esc":       0x1B,
     "space":      0x20,  "tab":       0x09,  "backspace": 0x08,

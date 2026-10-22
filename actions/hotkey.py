@@ -10,6 +10,7 @@ _keyboard = Controller()
 # pynput key map — used by send() for regular tap hotkeys (cross-platform)
 # ---------------------------------------------------------------------------
 SPECIAL_KEYS = {
+    "plus": '+', "minus": '-', "equal": '=',
     "ctrl":   PKey.ctrl,
     "shift":  PKey.shift,
     "alt":    PKey.alt,
@@ -45,15 +46,22 @@ def parse_hotkey(hotkey_str: str):
             keys.append(SPECIAL_KEYS[p])
         elif len(p) == 1:
             keys.append(p)
+        elif p:
+            raise ValueError(f'Unknown key: {p}')
     return keys
 
 
-def send(hotkey_str: str):
+def send(hotkey_str: str, held=()):
     """Press and release a hotkey combination — uses pynput (tap)."""
-    keys = parse_hotkey(hotkey_str)
+    already_held = set(parse_hotkey('+'.join(held)))
+    keys = [key for key in parse_hotkey(hotkey_str) if key not in already_held]
     if not keys:
         return
-    for k in keys:
-        _keyboard.press(k)
-    for k in reversed(keys):
-        _keyboard.release(k)
+    pressed = []
+    try:
+        for k in keys:
+            _keyboard.press(k)
+            pressed.append(k)
+    finally:
+        for k in reversed(pressed):
+            _keyboard.release(k)
