@@ -1,0 +1,23 @@
+Speed Editor Customizer for Windows 10/11 (64-bit)
+
+1. Right-click the downloaded ZIP and choose Extract All.
+2. Keep the entire SpeedEditorCustomizer folder in a permanent location.
+3. Double-click SpeedEditorCustomizer.exe to open the GUI.
+4. Optional: double-click Create Desktop Shortcut.vbs to add a desktop shortcut.
+   If your Windows policy disables scripts, right-click the EXE and use
+   Show more options > Send to > Desktop (create shortcut).
+
+Python, PowerShell, and administrator rights are not needed to run the app.
+The GUI opens without a controller. Connect your Speed Editor by USB or
+Bluetooth to use its buttons and dial.
+
+Keep the _internal folder beside the EXE; it contains required dependencies.
+To update: close the app, extract the new ZIP, and replace the old app folder.
+Keep its location/name the same if you made a desktop shortcut.
+
+Mappings are stored separately in:
+  %LOCALAPPDATA%\SpeedEditorCustomizer\config.json
+The previous valid save is kept as config.json.bak.
+An existing config.json beside the EXE is imported on first use only when
+there is no configuration in the user-data folder. The original is preserved.
+To move mappings from another installation, use the GUI's JSON import/export.

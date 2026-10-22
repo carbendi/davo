@@ -3,9 +3,9 @@
 # Run with:  python -m PyInstaller build.spec --clean
 
 import sys
+from pathlib import Path
 from PyInstaller.utils.hooks import collect_all, collect_submodules
 
-block_cipher = None
 IS_WIN = sys.platform == 'win32'
 IS_MAC = sys.platform == 'darwin'
 
@@ -34,6 +34,7 @@ if IS_WIN:
             'obsws_python',
             'keyring',
             'keyring.backends',
+            'keyring.backends.Windows',
             'requests',
         ]
     )
@@ -61,19 +62,16 @@ a = Analysis(
     ['main.py'],
     pathex=[],
     binaries=hid_b + sbc_b + plat_binaries,
-    datas=hid_d + sbc_d + plat_datas,
+    datas=hid_d + sbc_d + plat_datas + [('utils/button_positions.json', 'utils'), ('utils/editor img.png', 'utils')],
     hiddenimports=hid_h + sbc_h + plat_hidden,
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
     excludes=[],
-    win_no_prefer_redirects=False,
-    win_private_assemblies=False,
-    cipher=block_cipher,
     noarchive=False,
 )
 
-pyz = PYZ(a.pure, a.zipped_data, cipher=block_cipher)
+pyz = PYZ(a.pure)
 
 exe = EXE(
     pyz,
@@ -84,7 +82,7 @@ exe = EXE(
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
-    upx=IS_WIN,        # UPX disabled on macOS — breaks Gatekeeper
+    upx=False,
     console=False,     # no terminal window on either platform
     disable_windowed_traceback=False,
     argv_emulation=False,
@@ -98,13 +96,18 @@ exe = EXE(
 coll = COLLECT(
     exe,
     a.binaries,
-    a.zipfiles,
     a.datas,
     strip=False,
-    upx=IS_WIN,
+    upx=False,
     upx_exclude=[],
     name='SpeedEditorCustomizer',
 )
+
+if IS_WIN:
+    import shutil
+    for filename in ('Create Desktop Shortcut.vbs', 'START-HERE.txt'):
+        shutil.copy2(Path(SPECPATH) / 'packaging' / filename,
+                     Path(DISTPATH) / 'SpeedEditorCustomizer' / filename)
 
 # macOS: wrap the collected bundle into a proper .app
 if IS_MAC:

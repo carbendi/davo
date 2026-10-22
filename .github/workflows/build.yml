@@ -3,7 +3,11 @@ name: Build
 on:
   push:
     branches: [main]
+  pull_request:
   workflow_dispatch:   # allow manual trigger from GitHub Actions tab
+
+permissions:
+  contents: read
 
 jobs:
 
@@ -21,10 +25,28 @@ jobs:
 
       - name: Install dependencies
         run: |
-          pip install PyQt6 hidapi pynput pywin32 obsws-python pycaw screen-brightness-control keyring requests pyinstaller pyinstaller-hooks-contrib
+          python -m pip install -r requirements-build.txt
+
+      - name: Test configuration storage and recovery
+        run: python -m unittest discover -s tests -v
 
       - name: Build
         run: python -m PyInstaller build.spec --clean
+
+      - name: Smoke-test packaged GUI without a controller
+        shell: pwsh
+        run: |
+          $env:QT_QPA_PLATFORM = 'offscreen'
+          $app = Start-Process -FilePath "$PWD\dist\SpeedEditorCustomizer\SpeedEditorCustomizer.exe" -ArgumentList '--smoke-test' -WindowStyle Hidden -PassThru
+          if (-not $app.WaitForExit(60000)) {
+            $app.Kill()
+            throw 'Packaged GUI did not exit within 60 seconds.'
+          }
+          $app.Refresh()
+          if ($app.ExitCode -ne 0) { throw "Packaged GUI failed with exit code $($app.ExitCode)" }
+
+      - name: Record bundled dependencies
+        run: python -m pip freeze > dist/SpeedEditorCustomizer/build-dependencies.txt
 
       - name: Zip build
         run: cd dist && Compress-Archive -Path SpeedEditorCustomizer -DestinationPath SpeedEditorCustomizer-Windows.zip
@@ -40,6 +62,7 @@ jobs:
   # macOS Apple Silicon — arm64, native on M1/M2/M3 Macs
   # ---------------------------------------------------------------------------
   build-macos-arm64:
+    if: github.event_name != 'pull_request'
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
@@ -81,6 +104,7 @@ jobs:
   # macOS Intel — x86_64, built via Rosetta 2 on the arm64 runner
   # ---------------------------------------------------------------------------
   build-macos-intel:
+    if: github.event_name != 'pull_request'
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
@@ -126,17 +150,12 @@ jobs:
   # Release — runs after all three builds, publishes to "Latest" release
   # ---------------------------------------------------------------------------
   release:
-    needs: [build-windows, build-macos-arm64, build-macos-intel]
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    needs: [build-macos-arm64, build-macos-intel]
     runs-on: ubuntu-latest
     permissions:
       contents: write
     steps:
-      - name: Download Windows build
-        uses: actions/download-artifact@v4
-        with:
-          name: SpeedEditorCustomizer-Windows
-          path: artifacts/
-
       - name: Download macOS Apple Silicon build
         uses: actions/download-artifact@v4
         with:
@@ -158,6 +177,33 @@ jobs:
           prerelease: false
           make_latest: true
           files: |
-            artifacts/SpeedEditorCustomizer-Windows.zip
             artifacts/SpeedEditorCustomizer-macOS-AppleSilicon.zip
             artifacts/SpeedEditorCustomizer-macOS-Intel.zip
+
+  release-windows:
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    needs: build-windows
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    concurrency:
+      group: windows-release
+      cancel-in-progress: false
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: SpeedEditorCustomizer-Windows
+          path: artifacts/
+      - name: Publish Windows download
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: windows-latest
+          target_commitish: ${{ github.sha }}
+          name: Latest Windows Build
+          body: |
+            Windows GUI built from commit ${{ github.sha }}.
+            Download the ZIP, extract the entire folder, and open SpeedEditorCustomizer.exe.
+            An optional desktop shortcut creator is included.
+          make_latest: true
+          files: artifacts/SpeedEditorCustomizer-Windows.zip
+          fail_on_unmatched_files: true
