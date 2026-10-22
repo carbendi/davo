@@ -18,7 +18,7 @@ from actions import system
 
 
 class DesktopController(QObject):
-    event = pyqtSignal(object)
+    device_event = pyqtSignal(object)
     feedback = pyqtSignal(str)
     updated = pyqtSignal()
 
@@ -33,7 +33,7 @@ class DesktopController(QObject):
         self._device = None
         self._quitting = False
         self.engine = InputEngine(self.config, self.perform, hotkey.press_keys, hotkey.release_keys, self.changed)
-        self.event.connect(self.on_event)
+        self.device_event.connect(self.on_event)
         self.feedback.connect(self.message)
         self.updated.connect(self.refresh)
         self.ensure_profiles()
@@ -112,19 +112,19 @@ class DesktopController(QObject):
             try:
                 device = SpeedEditor()
                 self._device = device
-                device.on_key = lambda keys: self.event.emit(('keys', [k.name for k in keys]))
-                device.on_jog = lambda mode, value: self.event.emit(('jog', (modes.get(mode, 'jog'), value)))
+                device.on_key = lambda keys: self.device_event.emit(('keys', [k.name for k in keys]))
+                device.on_jog = lambda mode, value: self.device_event.emit(('jog', (modes.get(mode, 'jog'), value)))
                 device.authenticate()
-                self.event.emit(('status', 'Connected'))
+                self.device_event.emit(('status', 'Connected'))
                 device.run(self.stop_event)
             except Exception as exc:
                 if not self.stop_event.is_set():
-                    self.event.emit(('status', f'Not connected: {exc}'))
+                    self.device_event.emit(('status', f'Not connected: {exc}'))
             finally:
                 if device:
                     device.close()
                 self._device = None
-                self.event.emit(('disconnect', None))
+                self.device_event.emit(('disconnect', None))
             self.stop_event.wait(3)
 
     def perform(self, action):
