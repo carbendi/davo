@@ -34,6 +34,18 @@ To update, close the app and replace its complete folder with the newly extracte
 
 ---
 
+## Windows controls
+
+All profiles stay on your computer. Use **Windows & profiles** to create, duplicate, rename, and activate profiles. Assign an executable name (for example `Photoshop.exe`) and enable automatic selection. Choose a fallback profile for other applications, or lock the active profile.
+
+Click a controller button to configure **Tap**, **Double tap**, and **Long press**. Use **Record** to capture a keyboard shortcut. Actions include text, mouse clicks/scroll, window positioning, media controls, app/folder launching, application mute, macros, temporary layers and temporary dial functions. Use exact audio process names or `@foreground` for the active app. Double-tap actions introduce a 300 ms tap delay; long press starts at 500 ms. Immediate held controls use a separate button from gestures.
+
+Click the dial to choose custom left/right shortcuts, scroll, horizontal scroll, zoom, volume or brightness. Hardware mode and sensitivity remain configurable, with optional acceleration. **Hold to change dial** and **Hold to use layer** restore the previous assignment on release.
+
+The tray menu provides Pause, profile selection, Show mappings, Release all keys, Cancel macros and Quit. Closing the main window normally keeps mappings running in the tray. Startup and on-screen feedback are optional. OBS connects only when you choose Connect in Settings. Controller access alongside Resolve still requires hardware testing; automatic application profiles do not prevent Resolve from claiming the device.
+
+The build attempts a Defender scan when its hosted runner provides an enabled scanner. A successful build or unavailable scanner is not a malware clearance, and does not resolve a detection on another PC.
+
 ## Features
 
 **Local profiles and privacy**

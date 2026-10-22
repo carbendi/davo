@@ -129,8 +129,10 @@ class DesktopController(QObject):
 
     def perform(self, action):
         kind = action.get('action')
-        if kind == 'overlay':
-            self.show_mappings()
+        if kind in ('overlay', 'overlay_hold'):
+            self.show_mappings(hold=kind == 'overlay_hold')
+        elif kind == 'hide_overlay':
+            self.overlay.hide()
         elif kind == 'cancel_macro':
             self.cancel_macros()
         elif kind == 'hotkey':
@@ -171,6 +173,8 @@ class DesktopController(QObject):
         kind = action.get('action', 'none')
         if self.cancelled(generation):
             return
+        if action.get('app') == '@foreground':
+            action = dict(action, app=windows_tools.foreground()['exe'])
         if kind == 'macro':
             for _ in range(max(1, min(100, int(action.get('repeat', 1))))):
                 for step in action.get('steps', [])[:100]:
@@ -180,7 +184,7 @@ class DesktopController(QObject):
                         end = __import__('time').monotonic()+min(60, max(0, step.get('ms', 100)/1000))
                         while __import__('time').monotonic() < end and not self.cancelled(generation):
                             self.stop_event.wait(min(0.02, max(0, end-__import__('time').monotonic())))
-                    elif step.get('action') not in ('macro', 'hold_key', 'toggle_hold', 'layer_hold', 'dial_hold'):
+                    elif step.get('action') not in ('macro', 'hold_key', 'toggle_hold', 'layer_hold', 'dial_hold', 'overlay_hold'):
                         self.execute_worker(step, generation)
         elif kind == 'hotkey':
             hotkey.send(action.get('keys', ''), held=list(self.engine.refs))
@@ -294,13 +298,15 @@ class DesktopController(QObject):
         self.overlay.show()
         self.overlay_timer.start(duration)
 
-    def show_mappings(self):
+    def show_mappings(self, hold=False):
         layer = self.config['layers'].get(self.engine.layer, {})
         lines = [layer.get('name', 'Default')]
         for key, action in layer.get('buttons', {}).items():
             if action.get('action', 'none') != 'none':
                 lines.append(f"{key}: {action.get('label') or action.get('keys') or action.get('action')}")
         self.show_overlay('\n'.join(lines[:30]), 6000)
+        if hold:
+            self.overlay_timer.stop()
 
     def message(self, text):
         self.window.statusBar().showMessage(text, 8000)

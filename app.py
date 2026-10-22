@@ -878,7 +878,7 @@ class SpeedEditorWidget(QWidget):
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("Unbound — Editor Device Customizer")
+        self.setWindowTitle("Speed Editor Customizer")
         self._config = cfg.load()
         self._layer_id = cfg.DEFAULT_LAYER_ID
         self.signals = Signals()

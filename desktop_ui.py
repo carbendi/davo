@@ -119,11 +119,13 @@ ACTION_TYPES = [('Nothing', 'none'), ('Keyboard shortcut', 'hotkey'), ('Hold key
     ('Type text', 'text'), ('Mouse click / scroll', 'mouse'), ('Position active window', 'window'),
     ('Open app / folder / URL', 'app_launch'), ('Activate a window', 'app_switch'),
     ('Mute application', 'app_mute'), ('Media control', 'media'), ('Macro sequence', 'macro'),
-    ('Show mappings', 'overlay'), ('Release all keys', 'release_all'), ('Pause / resume mappings', 'pause'),
+    ('Show mappings', 'overlay'), ('Hold to show mappings', 'overlay_hold'), ('Release all keys', 'release_all'), ('Pause / resume mappings', 'pause'),
     ('Cancel macros', 'cancel_macro'), ('OBS scene', 'obs_scene'), ('OBS control', 'obs_toggle'), ('Wait', 'delay')]
 
 
 def summary(action):
+    if action.get('action') == 'delay':
+        return f"Wait {action.get('ms', 100)} ms"
     return action.get('label') or action.get('keys') or action.get('text', '')[:24] or action.get('mode') or action.get('action', 'none')
 
 
@@ -134,7 +136,7 @@ class ActionEditor(QWidget):
         form = QFormLayout(self)
         self.kind = QComboBox()
         for label, value in ACTION_TYPES:
-            if macro_step and value in ('macro', 'hold_key', 'toggle_hold', 'layer_hold', 'layer_push', 'layer_pop', 'dial_hold', 'dial_mode', 'overlay', 'release_all', 'pause', 'cancel_macro'):
+            if macro_step and value in ('macro', 'hold_key', 'toggle_hold', 'layer_hold', 'layer_push', 'layer_pop', 'dial_hold', 'dial_mode', 'overlay', 'overlay_hold', 'release_all', 'pause', 'cancel_macro'):
                 continue
             if not macro_step and value == 'delay':
                 continue
@@ -392,7 +394,7 @@ class UnifiedActionPanel(QWidget):
                 cfg.set_dial_default(self._config, self.dial.value(), self._layer_id)
             else:
                 action, double, long = [editor.value() for editor in self.editors]
-                if action['action'] in ('hold_key', 'layer_hold', 'dial_hold') and (double['action'] != 'none' or long['action'] != 'none'):
+                if action['action'] in ('hold_key', 'layer_hold', 'dial_hold', 'overlay_hold') and (double['action'] != 'none' or long['action'] != 'none'):
                     raise ValueError('Use a separate button for gestures when the tap action must stay held.')
                 action.update(double_press=double, long_press=long, label=self.label.text().strip())
                 cfg.set_button(self._config, self._button_name, action, self._layer_id)

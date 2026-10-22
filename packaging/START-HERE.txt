@@ -24,3 +24,12 @@ The previous valid save is kept as config.json.bak.
 An existing config.json beside the EXE is imported on first use only when
 there is no configuration in the user-data folder. The original is preserved.
 To move mappings from another installation, use the GUI's JSON import/export.
+
+WINDOWS CONTROLS
+Open Windows & profiles to manage local profiles and optional auto switching.
+Click a controller button for Tap / Double tap / Long press mappings.
+Click the dial for shortcut, scroll, zoom, volume and brightness assignments.
+Use the tray icon to pause, switch profiles, release keys, cancel macros or quit.
+Closing the main window keeps the app in the tray by default.
+No account, paid API, subscription or cloud service is used by these features.
+A Defender detection still needs investigation; do not disable protection.

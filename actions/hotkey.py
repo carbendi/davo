@@ -35,6 +35,10 @@ SPECIAL_KEYS = {
     "media_volume_down":PKey.media_volume_down,
     "media_volume_mute":PKey.media_volume_mute,
 }
+for number in range(13, 25):
+    if hasattr(PKey, f'f{number}'):
+        SPECIAL_KEYS[f'f{number}'] = getattr(PKey, f'f{number}')
+
 
 
 def parse_hotkey(hotkey_str: str):

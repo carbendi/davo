@@ -134,6 +134,10 @@ VK_CODES = {
     "f9":  0x78, "f10": 0x79, "f11": 0x7A, "f12": 0x7B,
 }
 
+VK_CODES.update({f'f{number}': 0x70+number-1 for number in range(13, 25)})
+VK_CODES.update({'media_play_pause': 0xB3, 'media_next': 0xB0, 'media_previous': 0xB1,
+                 'media_volume_up': 0xAF, 'media_volume_down': 0xAE, 'media_volume_mute': 0xAD})
+
 
 def _parse_vk_codes(hotkey_str: str) -> list[int]:
     codes = []
@@ -143,6 +147,8 @@ def _parse_vk_codes(hotkey_str: str) -> list[int]:
             codes.append(VK_CODES[part])
         elif len(part) == 1:
             codes.append(ord(part.upper()))
+        elif part:
+            raise ValueError(f'Unknown held key: {part}')
     return codes
 
 

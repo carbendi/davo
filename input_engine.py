@@ -90,7 +90,7 @@ class InputEngine:
                     else:
                         self._tap(button, mapping)
         for button in sorted(pressed):
-            if self.paused:
+            if self.paused and self.mapping(button).get('action') != 'pause':
                 continue
             mapping = self.mapping(button)
             deferred = any(mapping.get(k, {}).get('action', 'none') != 'none' for k in ('long_press', 'double_press'))
@@ -119,6 +119,8 @@ class InputEngine:
     def _release_action(self, button, action):
         if action.get('action') == 'hold_key':
             self.keys(action.get('keys', ''), False)
+        if action.get('action') == 'overlay_hold':
+            self.perform({'action': 'hide_overlay'})
         self.temporary_layers.pop(button, None)
         self.temporary_dials.pop(button, None)
         self.accum.clear()

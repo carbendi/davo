@@ -10,11 +10,22 @@ from unittest.mock import patch
 class DesktopGuiTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
+        import sys
+        import traceback
+        cls.slot_errors = []
+        previous = sys.excepthook
+        def report_slot_error(kind, error, trace):
+            traceback.print_exception(kind, error, trace, file=sys.stdout)
+            sys.stdout.flush()
+            cls.slot_errors.append(error)
+        sys.excepthook = report_slot_error
+        cls.addClassCleanup(setattr, sys, 'excepthook', previous)
         os.environ.setdefault('QT_QPA_PLATFORM', 'offscreen')
         from PyQt6.QtWidgets import QApplication
         cls.qt = QApplication.instance() or QApplication([])
 
     def setUp(self):
+        self.slot_errors.clear()
         import config
         from app import MainWindow
         from desktop_runtime import DesktopController
@@ -33,6 +44,9 @@ class DesktopGuiTests(unittest.TestCase):
         self.window.desktop_tab = DesktopTab(self.controller)
         self.addCleanup(self.window.deleteLater)
         self.addCleanup(self.controller.shutdown)
+
+    def tearDown(self):
+        self.assertEqual(self.slot_errors, [], 'Exception raised inside a Qt callback')
 
     def test_all_action_editors_round_trip(self):
         from desktop_ui import ActionEditor
