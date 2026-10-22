@@ -2,21 +2,22 @@
 
 import json
 import os
-import sys
 import uuid
+import shutil
+import tempfile
+import threading
+from pathlib import Path
+
+from app_paths import data_dir, legacy_config_file
 
 
 def _app_dir() -> str:
-    """Return the directory that should hold config.json.
-    When running as a PyInstaller bundle sys.frozen is set and sys.executable
-    points to the .exe, so we place config.json next to it.
-    When running from source, use the script directory as before."""
-    if getattr(sys, 'frozen', False):
-        return os.path.dirname(sys.executable)
-    return os.path.dirname(os.path.abspath(__file__))
+    """Return writable per-user storage, independent of the app's location."""
+    return str(data_dir())
 
 
 CONFIG_FILE = os.path.join(_app_dir(), 'config.json')
+_SAVE_LOCK = threading.RLock()
 
 # Action types
 ACTION_HOTKEY      = "hotkey"
@@ -51,11 +52,39 @@ DEFAULT_CONFIG = {
 
 
 def load() -> dict:
-    if not os.path.exists(CONFIG_FILE):
-        return _deep_copy(DEFAULT_CONFIG)
-    with open(CONFIG_FILE, 'r') as f:
-        data = json.load(f)
+    with _SAVE_LOCK:
+        target = Path(CONFIG_FILE)
+        legacy = legacy_config_file()
+        source = target if target.exists() else legacy
+        if not source.exists():
+            return _deep_copy(DEFAULT_CONFIG)
+        try:
+            data = _read_config(source)
+        except (ValueError, OSError) as exc:
+            backup = Path(str(source) + ".bak")
+            try:
+                data = _read_config(backup)
+            except (ValueError, OSError):
+                raise RuntimeError(
+                    f"Cannot load mappings from {source}. The original file has been preserved."
+                ) from exc
+        if source != target:
+            # Leave the original untouched so moving to a packaged build is reversible.
+            save(data)
+        return data
 
+
+def _read_config(path: Path) -> dict:
+    with path.open('r', encoding='utf-8') as f:
+        return _normalize(json.load(f))
+
+
+def _normalize(data: dict) -> dict:
+    if not isinstance(data, dict):
+        raise ValueError("Configuration must be a JSON object")
+    data = _deep_copy(data)
+    if not isinstance(data.get("obs", {}), dict):
+        raise ValueError("Invalid OBS settings")
     # Migrate old format (top-level "buttons") to layers
     if "buttons" in data and "layers" not in data:
         data["layers"] = {
@@ -65,12 +94,48 @@ def load() -> dict:
     merged = _deep_copy(DEFAULT_CONFIG)
     merged["obs"].update(data.get("obs", {}))
     merged["layers"] = data.get("layers", merged["layers"])
+    if not isinstance(merged["layers"], dict) or not isinstance(data.get("obs", {}), dict):
+        raise ValueError("Invalid layers or OBS settings")
+    for layer in merged["layers"].values():
+        if not isinstance(layer, dict) or not isinstance(layer.get("buttons", {}), dict):
+            raise ValueError("Invalid layer")
+        layer.setdefault("name", "Unnamed")
+        layer.setdefault("buttons", {})
+    merged["layers"].setdefault(DEFAULT_LAYER_ID, _deep_copy(DEFAULT_CONFIG["layers"][DEFAULT_LAYER_ID]))
     return merged
 
 
 def save(config: dict):
-    with open(CONFIG_FILE, 'w') as f:
-        json.dump(config, f, indent=2)
+    # Serialize and validate before touching the previous working file.
+    payload = json.dumps(_normalize(config), indent=2, ensure_ascii=False)
+    with _SAVE_LOCK:
+        target = Path(CONFIG_FILE)
+        target.parent.mkdir(parents=True, exist_ok=True)
+        temporary = None
+        backup_temp = None
+        try:
+            with tempfile.NamedTemporaryFile(mode='w', encoding='utf-8',
+                                             dir=target.parent, delete=False) as f:
+                temporary = Path(f.name)
+                f.write(payload)
+                f.flush()
+                os.fsync(f.fileno())
+            if target.exists():
+                try:
+                    _read_config(target)
+                except (ValueError, OSError):
+                    # Keep both the corrupt original and any valid recovery backup.
+                    shutil.copy2(target, target.with_name(f'config.corrupt-{uuid.uuid4().hex}.json'))
+                else:
+                    with tempfile.NamedTemporaryFile(dir=target.parent, delete=False) as f:
+                        backup_temp = Path(f.name)
+                    shutil.copy2(target, backup_temp)
+                    os.replace(backup_temp, str(target) + '.bak')
+            os.replace(temporary, target)
+        finally:
+            for path in (temporary, backup_temp):
+                if path is not None:
+                    path.unlink(missing_ok=True)
 
 
 def get_button(config: dict, button_name: str, layer_id: str = DEFAULT_LAYER_ID) -> dict:

@@ -4,15 +4,23 @@ A desktop app for remapping the buttons on a compatible editor controller to any
 
 ## Download
 
-**[Download the latest build](https://github.com/PuzzleEmptyM/blackmagic-speed-editor-customizer/releases/tag/latest)**
+**[Download the Windows GUI](https://github.com/carbendi/davo/releases/download/windows-latest/SpeedEditorCustomizer-Windows.zip)**
+
+Windows: extract the **entire ZIP**, open the `SpeedEditorCustomizer` folder, and double-click **`SpeedEditorCustomizer.exe`**. No Python installation or terminal is needed. Keep `_internal` beside the executable. Optional: double-click **`Create Desktop Shortcut.vbs`** to create a desktop shortcut. If scripts are disabled, right-click the EXE → Show more options → Send to → Desktop (create shortcut).
+
+[All releases](https://github.com/carbendi/davo/releases) · [Build status and artifacts](https://github.com/carbendi/davo/actions/workflows/build.yml)
 
 | Platform | File |
 |----------|------|
-| Windows | `UnboundCustomizer-Windows.zip` — extract and run `UnboundCustomizer.exe` |
-| macOS — Apple Silicon | `UnboundCustomizer-macOS-AppleSilicon.zip` — extract and open `UnboundCustomizer.app` |
-| macOS — Intel (macOS 13+) | `UnboundCustomizer-macOS-Intel.zip` — extract and open `UnboundCustomizer.app` |
+| Windows | `SpeedEditorCustomizer-Windows.zip` — extract and run `SpeedEditorCustomizer.exe` |
+| macOS — Apple Silicon | `SpeedEditorCustomizer-macOS-AppleSilicon.zip` — extract and open `SpeedEditorCustomizer.app` |
+| macOS — Intel (macOS 13+) | `SpeedEditorCustomizer-macOS-Intel.zip` — extract and open `SpeedEditorCustomizer.app` |
 
-> Builds are updated automatically whenever the main branch changes.
+> Windows builds are tested and published automatically when `main` changes, independently of the Mac builds. Pull requests produce a Windows test artifact without publishing a release. You can also run **Actions → Build → Run workflow**.
+
+Mappings are stored in `%LOCALAPPDATA%\SpeedEditorCustomizer\config.json` on Windows (`~/Library/Application Support/SpeedEditorCustomizer/config.json` on Mac), with a previous valid save in `config.json.bak`. Updating the app folder leaves your mappings intact. On first use, an old `config.json` beside the app is copied into user storage if no user configuration exists; the original stays untouched. Use JSON import/export to transfer mappings between installations.
+
+To update, close the app and replace its complete folder with the newly extracted folder. Keep the location the same if you created a desktop shortcut.
 
 ---
 
@@ -73,7 +81,7 @@ Create a virtual environment and install dependencies:
 
 ```
 python -m venv .venv
-.venv\Scripts\pip install PyQt6 hidapi pynput pywin32 obsws-python pycaw screen-brightness-control
+.venv\Scripts\python -m pip install -r requirements-windows.txt
 ```
 
 Then run:
@@ -81,6 +89,10 @@ Then run:
 ```
 .venv\Scripts\python main.py
 ```
+
+### Building the Windows EXE yourself
+
+With Python 3.12 installed, double-click `build.bat`. It creates the virtual environment if needed, installs build dependencies, runs configuration tests, and builds the app. The result is `dist\SpeedEditorCustomizer\SpeedEditorCustomizer.exe`. Distribute the **entire** `SpeedEditorCustomizer` folder, not the EXE alone. The build does not include your personal mappings or credentials.
 
 ## Running from source (Mac)
 
@@ -123,7 +135,8 @@ To verify the latch is active before testing scroll, press Tab on your physical 
 | `actions/app_switch.py` | Window focus via pywin32 |
 | `actions/obs.py` | OBS WebSocket client via obsws-python |
 | `actions/system.py` | Master volume, per-app volume, screen brightness |
-| `config.json` | Your saved button mappings |
+| `app_paths.py` | Per-user storage and migration paths |
+| `config.json` | Saved button mappings in the user-data folder |
 
 ## Authentication
 

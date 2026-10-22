@@ -19,6 +19,12 @@ def main():
     window = application.MainWindow()
     window.show()
 
+    if "--smoke-test" in sys.argv:
+        # Exercise the packaged GUI and imports without contacting hardware or cloud.
+        from PyQt6.QtCore import QTimer
+        QTimer.singleShot(500, qt_app.quit)
+        return qt_app.exec()
+
     config = window._config
     signals = window.get_signals()
 
@@ -189,4 +195,4 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())
