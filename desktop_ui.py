@@ -118,7 +118,7 @@ ACTION_TYPES = [('Nothing', 'none'), ('Keyboard shortcut', 'hotkey'), ('Hold key
     ('Previous layer', 'layer_pop'), ('Hold to change dial', 'dial_hold'), ('Toggle dial function', 'dial_mode'),
     ('Type text', 'text'), ('Mouse click / scroll', 'mouse'), ('Position active window', 'window'),
     ('Open app / folder / URL', 'app_launch'), ('Activate a window', 'app_switch'),
-    ('Mute application', 'app_mute'), ('Media control', 'media'), ('Macro sequence', 'macro'),
+    ('Mute application', 'app_mute'), ('Switch audio output', 'audio_output'), ('Media control', 'media'), ('Macro sequence', 'macro'),
     ('Show mappings', 'overlay'), ('Hold to show mappings', 'overlay_hold'), ('Release all keys', 'release_all'), ('Pause / resume mappings', 'pause'),
     ('Cancel macros', 'cancel_macro'), ('OBS scene', 'obs_scene'), ('OBS control', 'obs_toggle'), ('Wait', 'delay')]
 
@@ -144,6 +144,10 @@ class ActionEditor(QWidget):
         form.addRow('Action', self.kind)
         self.shortcut = ShortcutInput()
         self.target = QLineEdit()
+        self.output = QComboBox()
+        self.output.addItem('Choose audio output...', '')
+        self.refresh_outputs = QPushButton('Find connected audio outputs')
+        self.refresh_outputs.clicked.connect(self.find_outputs)
         self.text = QPlainTextEdit()
         self.text.setMaximumHeight(100)
         self.layer = QComboBox()
@@ -162,7 +166,7 @@ class ActionEditor(QWidget):
         self.macro = QPushButton('Edit sequence (0 steps)')
         self.macro.clicked.connect(self.edit_macro)
         self.rows = []
-        for name, widget in [('Shortcut', self.shortcut), ('Target', self.target), ('Text', self.text),
+        for name, widget in [('Shortcut', self.shortcut), ('Target', self.target), ('Output device', self.output), ('', self.refresh_outputs), ('Text', self.text),
                              ('Layer', self.layer), ('Operation', self.option), ('Dial', self.dial),
                              ('Scroll amount', self.amount), ('Repeat', self.repeat), ('Wait (ms)', self.delay), ('Sequence', self.macro)]:
             label = QLabel(name)
@@ -177,7 +181,7 @@ class ActionEditor(QWidget):
     def visibility(self):
         kind = self.kind.currentData()
         visible = {'hotkey': [self.shortcut], 'hold_key': [self.shortcut], 'toggle_hold': [self.shortcut],
-                   'text': [self.text], 'layer_hold': [self.layer], 'layer_push': [self.layer],
+                   'text': [self.text], 'audio_output': [self.output, self.refresh_outputs], 'layer_hold': [self.layer], 'layer_push': [self.layer],
                    'dial_hold': [self.dial], 'dial_mode': [self.dial], 'macro': [self.macro, self.repeat],
                    'mouse': [self.option, self.amount], 'window': [self.option], 'media': [self.option],
                    'obs_toggle': [self.option], 'delay': [self.delay]}.get(kind, [self.target] if kind in ('app_launch', 'app_switch', 'app_mute', 'obs_scene') else [])
@@ -215,6 +219,8 @@ class ActionEditor(QWidget):
         self.delay.setValue(action.get('ms', 100))
         self.repeat.setValue(action.get('repeat', 1))
         self.steps = copy.deepcopy(action.get('steps', []))
+        self.output.clear()
+        self.output.addItem(action.get('device_name', 'Choose audio output...'), action.get('device_id', ''))
         self.macro.setText(f'Edit sequence ({len(self.steps)} steps)')
 
     def value(self):
@@ -224,10 +230,19 @@ class ActionEditor(QWidget):
             action['keys'] = self.shortcut.text.text().strip().lower()
             from actions.hotkey import parse_hotkey
             parse_hotkey(action['keys'])
+            if kind in ('hold_key', 'toggle_hold'):
+                import sys
+                if sys.platform == 'win32':
+                    from platform_layer.windows import _parse_vk_codes
+                    _parse_vk_codes(action['keys'])
         elif kind == 'media':
             action = {'action': 'hotkey', 'keys': self.option.currentData()}
         elif kind == 'text':
             action['text'] = self.text.toPlainText()
+        elif kind == 'audio_output':
+            if not self.output.currentData():
+                raise ValueError('Choose a connected audio output first.')
+            action.update(device_id=self.output.currentData(), device_name=self.output.currentText())
         elif kind in ('layer_hold', 'layer_push'):
             action['layer'] = self.layer.currentData() or 'default'
         elif kind in ('dial_mode', 'dial_hold'):
@@ -246,6 +261,17 @@ class ActionEditor(QWidget):
         elif kind in ('app_launch', 'app_switch', 'app_mute', 'obs_scene'):
             action[{'app_launch': 'path', 'obs_scene': 'scene'}.get(kind, 'app')] = self.target.text().strip()
         return action
+
+    def find_outputs(self):
+        try:
+            devices = windows_tools.output_devices()
+            selected = self.output.currentData()
+            self.output.clear()
+            for name, identifier in devices:
+                self.output.addItem(name, identifier)
+            self.output.setCurrentIndex(max(0, self.output.findData(selected)))
+        except Exception as exc:
+            QMessageBox.warning(self, 'Audio outputs', str(exc))
 
     def edit_macro(self):
         dialog = QDialog(self)
@@ -472,7 +498,7 @@ class DesktopTab(QWidget):
     def startup(self, enabled):
         try:
             windows_tools.set_startup(enabled)
-        except OSError as exc:
+        except (OSError, RuntimeError) as exc:
             QMessageBox.warning(self, 'Startup setting', str(exc))
 
     def refresh_profiles(self):

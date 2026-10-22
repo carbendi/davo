@@ -70,6 +70,22 @@ def startup_enabled():
         return False
 
 
+def output_devices():
+    from pycaw.pycaw import AudioUtilities
+    from pycaw.constants import EDataFlow, DEVICE_STATE
+    return [(device.FriendlyName or 'Audio output', device.id) for device in
+            AudioUtilities.GetAllDevices(data_flow=EDataFlow.eRender.value,
+                                         device_state=DEVICE_STATE.ACTIVE.value)]
+
+
+def switch_output(identifier):
+    from pycaw.pycaw import AudioUtilities
+    from pycaw.constants import ERole
+    if not identifier:
+        raise ValueError('Choose an audio output first')
+    AudioUtilities.SetDefaultDevice(identifier, roles=[ERole.eConsole, ERole.eMultimedia])
+
+
 def set_startup(enabled):
     if sys.platform != 'win32':
         raise RuntimeError('Windows startup is only available on Windows')

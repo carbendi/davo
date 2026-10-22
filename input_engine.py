@@ -2,10 +2,19 @@
 
 import copy
 import time
+import threading
+
+
+def synchronized(method):
+    def wrapped(self, *args, **kwargs):
+        with self.lock:
+            return method(self, *args, **kwargs)
+    return wrapped
 
 
 class InputEngine:
     def __init__(self, config, perform, press, release, changed=lambda: None, clock=time.monotonic):
+        self.lock = threading.RLock()
         self.config, self.perform = config, perform
         self.press, self.release, self.changed, self.clock = press, release, changed, clock
         self.physical = set()
@@ -32,6 +41,7 @@ class InputEngine:
     def mapping(self, button):
         return copy.deepcopy(self.config['layers'].get(self.layer, {}).get('buttons', {}).get(button, {'action': 'none'}))
 
+    @synchronized
     def keys(self, keys, down):
         tokens = list(dict.fromkeys(k.strip().lower() for k in keys.split('+') if k.strip()))
         for key in tokens if down else reversed(tokens):
@@ -47,6 +57,7 @@ class InputEngine:
                 else:
                     self.refs[key] = count - 1
 
+    @synchronized
     def reset(self):
         for key in list(self.refs):
             self.release(key)

@@ -53,7 +53,8 @@ class DesktopGuiTests(unittest.TestCase):
         actions = [{'action': 'hotkey', 'keys': 'ctrl+s'}, {'action': 'dial_hold', 'mode': 'horizontal', 'hw_mode': 'Shuttle'},
                    {'action': 'layer_hold', 'layer': 'default'}, {'action': 'text', 'text': 'hello'},
                    {'action': 'macro', 'repeat': 3, 'steps': [{'action': 'delay', 'ms': 100}]},
-                   {'action': 'mouse', 'mode': 'left', 'count': 2}, {'action': 'app_mute', 'app': '@foreground'}]
+                   {'action': 'mouse', 'mode': 'left', 'count': 2}, {'action': 'app_mute', 'app': '@foreground'},
+                   {'action': 'audio_output', 'device_id': 'test-device', 'device_name': 'Test speakers'}]
         editor = ActionEditor([('default', 'Default')])
         for action in actions:
             editor.load(action)

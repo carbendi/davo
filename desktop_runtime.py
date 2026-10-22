@@ -127,6 +127,10 @@ class DesktopController(QObject):
                 self.device_event.emit(('disconnect', None))
             self.stop_event.wait(3)
 
+    def send_shortcut(self, keys):
+        with self.engine.lock:
+            hotkey.send(keys, held=list(self.engine.refs))
+
     def perform(self, action):
         kind = action.get('action')
         if kind in ('overlay', 'overlay_hold'):
@@ -136,7 +140,7 @@ class DesktopController(QObject):
         elif kind == 'cancel_macro':
             self.cancel_macros()
         elif kind == 'hotkey':
-            hotkey.send(action.get('keys', ''), held=list(self.engine.refs))
+            self.send_shortcut(action.get('keys', ''))
         elif kind not in (None, 'none'):
             if action.get('app') == '@foreground':
                 action['app'] = windows_tools.foreground()['exe']
@@ -187,10 +191,12 @@ class DesktopController(QObject):
                     elif step.get('action') not in ('macro', 'hold_key', 'toggle_hold', 'layer_hold', 'dial_hold', 'overlay_hold'):
                         self.execute_worker(step, generation)
         elif kind == 'hotkey':
-            hotkey.send(action.get('keys', ''), held=list(self.engine.refs))
+            self.send_shortcut(action.get('keys', ''))
         elif kind == 'text':
             from pynput.keyboard import Controller
             keyboard = Controller()
+            if self.engine.refs:
+                raise ValueError('Release held modifiers before typing text.')
             for character in action.get('text', ''):
                 if self.cancelled(generation):
                     break
@@ -201,6 +207,8 @@ class DesktopController(QObject):
             windows_tools.window_action(action.get('mode', 'maximize'))
         elif kind == 'app_mute':
             windows_tools.app_audio(action.get('app', ''), mute=True)
+        elif kind == 'audio_output':
+            windows_tools.switch_output(action.get('device_id', ''))
         elif kind == 'dial_step':
             sign, mode = action.get('direction', 1), action.get('mode')
             if mode == 'sys_vol':
@@ -213,7 +221,7 @@ class DesktopController(QObject):
                 windows_tools.mouse({'mode': mode, 'amount': action.get('step', 1)}, sign)
             elif mode == 'zoom':
                 # Explicit modifier events preserve any existing user-held Ctrl.
-                hotkey.send('ctrl+plus' if sign > 0 else 'ctrl+minus', held=list(self.engine.refs))
+                self.send_shortcut('ctrl+plus' if sign > 0 else 'ctrl+minus')
         elif kind == 'app_launch':
             import platform_layer
             platform_layer.launch_app(action.get('path', ''))
