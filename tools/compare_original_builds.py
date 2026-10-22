@@ -18,7 +18,16 @@ def sections(data):
         result[name] = {'size': size, 'sha256': sha(data[pointer:pointer+size])}
     security_offset = opt + (112 if struct.unpack_from('<H', data, opt)[0] == 0x20b else 96) + 8 * 4
     cert_address, cert_size = struct.unpack_from('<II', data, security_offset)
-    return {'sections': result, 'authenticode_certificate_size': cert_size}
+    debug_rva, debug_size = struct.unpack_from('<II', data, security_offset + 16)
+    debug_timestamp = None
+    for i in range(count):
+        off = opt + opt_size + i * 40
+        virtual_size, virtual_address, raw_size, raw_offset = struct.unpack_from('<IIII', data, off + 8)
+        if virtual_address <= debug_rva < virtual_address + max(virtual_size, raw_size):
+            debug_timestamp = struct.unpack_from('<I', data, raw_offset + debug_rva - virtual_address + 4)[0]
+    return {'sections': result, 'authenticode_certificate_size': cert_size,
+            'pe_timestamp': struct.unpack_from('<I', data, pe + 8)[0],
+            'debug_timestamp': debug_timestamp}
 
 def carchive(data):
     cookie = data.rfind(b'MEI\x0c\x0b\x0a\x0b\x0e')
@@ -55,11 +64,14 @@ def package(folder):
         if '==' in line:
             name, version = line.split('==', 1)
             deps[name.lower()] = version
+    lib_name = next(n for n in files if n.endswith('/base_library.zip'))
+    with zipfile.ZipFile(io.BytesIO(files[lib_name])) as lib:
+        library = {n:sha(lib.read(n)) for n in lib.namelist()}
     exe = files[exe_name]
     entries = carchive(exe)
     pyz = next(value for name, value in entries.items() if name.lower().endswith('.pyz'))
     return {'zip_sha256': sha(raw), 'zip_size':len(raw), 'exe_sha256':sha(exe),
-            'exe_size': len(exe), 'pe': sections(exe),
+            'exe_size': len(exe), 'pe': sections(exe), 'base_library': library,
             'files': {n:sha(v) for n,v in files.items()}, 'dependencies':deps,
             'archive': {n:sha(v) for n,v in entries.items()}, 'modules':pyz_modules(pyz)}
 
@@ -69,8 +81,9 @@ def diff(a, b):
             'identical_count':sum(a[k]==b[k] for k in a.keys()&b.keys())}
 
 old, new = package('comparison/old'), package('comparison/new')
-report = {'old': {k:v for k,v in old.items() if k not in ('files','dependencies','archive','modules')},
-          'new': {k:v for k,v in new.items() if k not in ('files','dependencies','archive','modules')},
+report = {'old': {k:v for k,v in old.items() if k not in ('files','dependencies','archive','modules','base_library')},
+          'new': {k:v for k,v in new.items() if k not in ('files','dependencies','archive','modules','base_library')},
+          'base_library':diff(old['base_library'],new['base_library']),
           'dependencies':diff(old['dependencies'],new['dependencies']),
           'files':diff(old['files'],new['files']),
           'embedded_entries':diff(old['archive'],new['archive']),
