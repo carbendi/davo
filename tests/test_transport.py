@@ -117,3 +117,15 @@ class TransportTests(unittest.TestCase):
         engine = InputEngine(config, self.actions.append, lambda k: None, lambda k: None)
         engine.keys_changed(['SHTL'])
         self.assertEqual(self.actions, [{'action': 'hotkey', 'keys': 'x'}])
+
+    def test_reset_releases_modifiers_before_sending_stop(self):
+        config = {'layers': {'default': {'buttons': {}, 'dial_default': self.source}}}
+        events = []
+        engine = InputEngine(config, events.append, lambda k: None, lambda k: events.append(('release', k)))
+        engine.keys_changed(['SHTL'])
+        engine.jog('shuttle', 400)
+        engine.keys('ctrl', True)
+        events.clear()
+        engine.reset()
+        self.assertEqual(events[0], ('release', 'ctrl'))
+        self.assertEqual(events[1]['shortcuts'], ['k'])

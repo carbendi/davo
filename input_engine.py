@@ -61,11 +61,11 @@ class InputEngine:
 
     @synchronized
     def reset(self):
-        self.transport.stop()
-        self.transport.configure({})
         for key in list(self.refs):
             self.release(key)
         self.refs.clear()
+        self.transport.stop()
+        self.transport.configure({})
         self.active.clear()
         self.latched.clear()
         self.pending_taps.clear()
