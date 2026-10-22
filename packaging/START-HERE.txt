@@ -24,3 +24,28 @@ The previous valid save is kept as config.json.bak.
 An existing config.json beside the EXE is imported on first use only when
 there is no configuration in the user-data folder. The original is preserved.
 To move mappings from another installation, use the GUI's JSON import/export.
+
+WINDOWS CONTROLS
+Open Windows & profiles to manage local profiles and optional auto switching.
+Click a controller button for Tap / Double tap / Long press mappings.
+Click the dial for shortcut, scroll, zoom, volume and brightness assignments.
+Use the tray icon to pause, switch profiles, release keys, cancel macros or quit.
+Closing the main window keeps the app in the tray by default.
+No account, paid API, subscription or cloud service is used by these features.
+A Defender detection still needs investigation; do not disable protection.
+
+JOG / SHUTTLE / SCROLL AND LEDs
+Click the dial picture. Set Turn controls to Editing transport and Save.
+Focus the timeline/viewer in Resolve. JOG steps frames; SCRL steps faster.
+SHTL establishes centre at the current dial position: turn either way for
+reverse/forward playback with speed bands (default 1x/2x/4x/8x). Return to
+centre to stop. STOP/PLAY toggles playback; press SHTL again to re-centre.
+After STOP, return to neutral before shuttling again. The dial has no spring.
+Adjust units/frame, scroll steps, neutral zone and speed bands in the GUI.
+Mode LEDs and supported mapped-button LEDs follow the customiser state.
+Switch LED feedback off under Windows & profiles if preferred.
+The four transport buttons are reserved only while Editing transport is active.
+This uses configurable keyboard shortcuts, not native Resolve integration.
+Stop playback before changing apps: if Resolve loses focus, the stop command
+waits until its window regains focus, and playback may continue meanwhile.
+Hardware feel and simultaneous Resolve control still need device testing.

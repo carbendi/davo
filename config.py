@@ -37,6 +37,9 @@ OBS_TOGGLE_OPTIONS = ["stream", "record", "mute_mic"]
 DEFAULT_LAYER_ID = "default"
 
 DEFAULT_CONFIG = {
+    "profiles": {},
+    "active_profile": "default",
+    "desktop": {"auto_profiles": False, "fallback_profile": "default", "close_to_tray": True, "overlay": True},
     "obs": {
         "host": "localhost",
         "port": 4455,
@@ -92,6 +95,14 @@ def _normalize(data: dict) -> dict:
         }
 
     merged = _deep_copy(DEFAULT_CONFIG)
+    for name in ('profiles', 'active_profile', 'desktop'):
+        if name in data:
+            merged[name] = _deep_copy(data[name])
+    if not isinstance(merged['profiles'], dict) or not isinstance(merged['desktop'], dict):
+        raise ValueError('Invalid profile settings')
+    for profile in merged['profiles'].values():
+        if not isinstance(profile, dict) or not isinstance(profile.get('layers'), dict):
+            raise ValueError('Invalid saved profile')
     merged["obs"].update(data.get("obs", {}))
     merged["layers"] = data.get("layers", merged["layers"])
     if not isinstance(merged["layers"], dict) or not isinstance(data.get("obs", {}), dict):

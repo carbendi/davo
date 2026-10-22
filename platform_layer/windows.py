@@ -122,6 +122,7 @@ def list_windows() -> list[str]:
 # ---------------------------------------------------------------------------
 
 VK_CODES = {
+    "equal": 0xBB, "minus": 0xBD,
     "ctrl":       0x11,  "shift":     0x10,  "alt":       0xA4,
     "win":        0x5B,  "enter":     0x0D,  "esc":       0x1B,
     "space":      0x20,  "tab":       0x09,  "backspace": 0x08,
@@ -133,6 +134,10 @@ VK_CODES = {
     "f9":  0x78, "f10": 0x79, "f11": 0x7A, "f12": 0x7B,
 }
 
+VK_CODES.update({f'f{number}': 0x70+number-1 for number in range(13, 25)})
+VK_CODES.update({'media_play_pause': 0xB3, 'media_next': 0xB0, 'media_previous': 0xB1,
+                 'media_volume_up': 0xAF, 'media_volume_down': 0xAE, 'media_volume_mute': 0xAD})
+
 
 def _parse_vk_codes(hotkey_str: str) -> list[int]:
     codes = []
@@ -140,8 +145,10 @@ def _parse_vk_codes(hotkey_str: str) -> list[int]:
         part = part.strip()
         if part in VK_CODES:
             codes.append(VK_CODES[part])
-        elif len(part) == 1:
+        elif len(part) == 1 and part.isascii() and part.isalnum():
             codes.append(ord(part.upper()))
+        elif part:
+            raise ValueError(f'Unknown held key: {part}')
     return codes
 
 

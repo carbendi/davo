@@ -34,6 +34,18 @@ To update, close the app and replace its complete folder with the newly extracte
 
 ---
 
+## Windows controls
+
+All profiles stay on your computer. Use **Windows & profiles** to create, duplicate, rename, and activate profiles. Assign an executable name (for example `Photoshop.exe`) and enable automatic selection. Choose a fallback profile for other applications, or lock the active profile.
+
+Click a controller button to configure **Tap**, **Double tap**, and **Long press**. Use **Record** to capture a keyboard shortcut. Actions include text, mouse clicks/scroll, window positioning, media controls, app/folder launching, application mute, macros, temporary layers and temporary dial functions. Use exact audio process names or `@foreground` for the active app. Double-tap actions introduce a 300 ms tap delay; long press starts at 500 ms. Immediate held controls use a separate button from gestures.
+
+Click the dial to choose custom left/right shortcuts, scroll, horizontal scroll, zoom, volume or brightness. Hardware mode and sensitivity remain configurable, with optional acceleration. **Hold to change dial** and **Hold to use layer** restore the previous assignment on release.
+
+The tray menu provides Pause, profile selection, Show mappings, Release all keys, Cancel macros and Quit. Closing the main window normally keeps mappings running in the tray. Startup and on-screen feedback are optional. OBS connects only when you choose Connect in Settings. Controller access alongside Resolve still requires hardware testing; automatic application profiles do not prevent Resolve from claiming the device.
+
+The build attempts a Defender scan when its hosted runner provides an enabled scanner. A successful build or unavailable scanner is not a malware clearance, and does not resolve a detection on another PC.
+
 ## Features
 
 **Local profiles and privacy**
@@ -150,3 +162,17 @@ The device requires a challenge-response handshake before it sends input events.
 
 HID authentication algorithm by [Sylvain Munaut](https://github.com/smunaut) (Apache 2.0).
 Claude Code used for styling, debugging, and documentation.
+# Editing transport and controller LEDs (Windows)
+
+Click the dial in the controller picture, select **Editing transport (Jog / Shuttle / Scroll)** under **Turn controls**, and save. Existing button assignments are preserved; while this dial function is active, JOG, SHTL, SCRL and STOP/PLAY are reserved for transport. Other dial functions keep their custom button mappings.
+
+- **JOG:** precise frame steps using Left/Right by default. Small movements accumulate; adjust **Dial units per frame** to tune the feel (lower = more sensitive).
+- **SCRL:** larger frame steps, initially ten frames for each jog step. Adjust **Scroll frames per step**.
+- **SHTL:** select it with the dial at your preferred centre position. Turn away from that point for forward/reverse playback and increasing speed using J/K/L shortcuts. The initial four bands request 1x, 2x, 4x and 8x. Hold the dial still to maintain speed; return to centre to stop. Adjust the neutral zone, speed-band width and maximum J/L presses in the dial editor.
+- **STOP/PLAY:** toggle mapper-controlled forward playback/stop. After stopping in Shuttle, return to neutral before moving again. Press SHTL again to stop and establish a new neutral position. This free-spinning dial does not physically spring back to centre.
+
+The selected mode LED follows the customiser. Supported button LEDs illuminate for active mappings and stay lit for latched held keys. Pause extinguishes them; reconnection restores feedback. Disable **Controller LED feedback** under **Windows & profiles** if desired. These LEDs describe the customiser's state, not Resolve's internal state.
+
+Transport shortcuts are configurable, and are sent only while the specified editor executable (initially `Resolve.exe`) is in the foreground. Select the timeline/viewer first, rather than a text field. A stop is requested on neutral, mode/profile changes, pause, disconnect and exit. If the editor loses focus, its stop is deferred until the same window regains focus; playback may continue meanwhile. Neutral or re-selection is required before Shuttle resumes. Stop playback before switching away or quitting. Held mapped modifiers temporarily block transport keys.
+
+This is shortcut-based control, not native Speed Editor integration. Resolve can also claim the hardware; simultaneous native/customiser operation and the dial calibration need a physical-device test. For original native Resolve operation, quit the customiser from the tray. No cloud service or paid API is used.
