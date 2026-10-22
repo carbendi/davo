@@ -132,3 +132,55 @@ class InputTests(unittest.TestCase):
         self.engine.keys_changed(['A'])
         self.engine.jog('jog', 1)
         self.assertEqual(self.actions, [])
+
+    def test_mapping_save_keeps_volume_selected_and_uses_new_sensitivity(self):
+        self.bind('SHTL', {'action': 'dial_mode', 'mode': 'sys_vol', 'hw_mode': 'Jog', 'sensitivity': 75})
+        self.engine.keys_changed(['SHTL'])
+        self.engine.keys_changed([])
+        self.bind('SHTL', {'action': 'dial_mode', 'mode': 'sys_vol', 'hw_mode': 'Jog', 'sensitivity': 30})
+        self.engine.reload_mappings()
+        self.assertEqual(self.engine.dial_source()['mode'], 'sys_vol')
+        self.assertEqual(self.engine.dial_source()['sensitivity'], 30)
+        for _ in range(14):
+            self.engine.jog('jog', 1)
+        self.assertEqual(self.actions[-1]['action'], 'dial_step')
+        self.assertEqual(self.actions[-1]['mode'], 'sys_vol')
+        self.engine.keys_changed(['SHTL'])
+        self.assertIsNone(self.engine.dial_override)
+
+    def test_mapping_save_preserves_layer_but_releases_held_keys(self):
+        self.engine.stack.append('other')
+        self.bind('A', {'action': 'hold_key', 'keys': 'ctrl'}, 'other')
+        self.engine.keys_changed(['A'])
+        self.engine.reload_mappings()
+        self.assertEqual(self.engine.layer, 'other')
+        self.assertEqual(self.releases, ['ctrl'])
+        self.engine.keys_changed(['A'])
+        self.assertEqual(self.presses, ['ctrl'])
+
+    def test_mapping_save_drops_removed_dial_binding(self):
+        self.bind('A', {'action': 'dial_mode', 'mode': 'brightness'})
+        self.engine.keys_changed(['A'])
+        self.engine.keys_changed([])
+        self.bind('A', {'action': 'none'})
+        self.engine.reload_mappings()
+        self.assertIsNone(self.engine.dial_override)
+        self.assertIsNone(self.engine.dial_override_owner)
+
+    def test_mapping_save_updates_gesture_dial_binding(self):
+        action = {'action': 'dial_mode', 'mode': 'sys_vol', 'sensitivity': 80}
+        self.bind('A', {'action': 'none', 'long_press': action})
+        self.engine.execute('A', action)
+        self.config['layers']['default']['buttons']['A']['long_press']['sensitivity'] = 25
+        self.engine.reload_mappings()
+        self.assertEqual(self.engine.dial_source()['sensitivity'], 25)
+
+    def test_mapping_save_keeps_transport_mode_but_stops_playback(self):
+        self.config['layers']['default']['dial_default'] = {'action': 'transport'}
+        self.engine.keys_changed(['SHTL'])
+        self.engine.keys_changed([])
+        self.engine.jog('shuttle', 400)
+        self.engine.reload_mappings()
+        self.assertEqual(self.engine.dial_source()['hw_mode'], 'Shuttle')
+        self.assertFalse(self.engine.transport.playing)
+        self.assertEqual(self.actions[-1]['shortcuts'], ['k'])

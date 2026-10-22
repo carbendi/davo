@@ -26,6 +26,7 @@ class InputEngine:
         self.temporary_layers = {}
         self.temporary_dials = {}
         self.dial_override = None
+        self.dial_override_owner = None
         self.pending_taps = {}
         self.paused = False
         self.accum = {}
@@ -60,7 +61,7 @@ class InputEngine:
                     self.refs[key] = count - 1
 
     @synchronized
-    def reset(self):
+    def reset(self, notify=True):
         for key in list(self.refs):
             self.release(key)
         self.refs.clear()
@@ -73,9 +74,33 @@ class InputEngine:
         self.temporary_layers.clear()
         self.temporary_dials.clear()
         self.dial_override = None
+        self.dial_override_owner = None
         self.accum.clear()
         # Keep physical state: buttons held across a profile change must be
         # released before they can trigger an action in the new profile.
+        if notify:
+            self.changed()
+
+    @synchronized
+    def reload_mappings(self):
+        """Refresh persistent selections after an edit, releasing held inputs."""
+        stack = [lid for lid in self.stack if lid in self.config['layers']]
+        owner = self.dial_override_owner
+        previous_transport = copy.deepcopy(self.transport.source)
+        previous_mode = self.transport.mode
+        self.reset(notify=False)
+        self.stack = stack or ['default']
+        if owner:
+            layer, button, gesture = owner
+            action = self.config['layers'].get(layer, {}).get('buttons', {}).get(button, {})
+            if gesture:
+                action = action.get(gesture, {})
+            if action.get('action') == 'dial_mode' and action.get('mode') != 'normal':
+                self.dial_override = copy.deepcopy(action)
+                self.dial_override_owner = owner
+        if self.transport.configure(self._dial_source()):
+            if previous_transport and previous_transport.get('hw_mode', 'Jog') == self.transport.source.get('hw_mode', 'Jog'):
+                self.transport.select(previous_mode)
         self.changed()
 
     def disconnected(self):
@@ -181,8 +206,12 @@ class InputEngine:
                 self.temporary_dials[button] = copy.deepcopy(action)
             elif mode == 'normal' or self.dial_override == action:
                 self.dial_override = None
+                self.dial_override_owner = None
             else:
                 self.dial_override = copy.deepcopy(action)
+                mapping = self.mapping(button)
+                gesture = next((name for name in ('long_press', 'double_press') if mapping.get(name) == action), None)
+                self.dial_override_owner = (self.layer, button, gesture)
             self.accum.clear()
         elif kind == 'release_all':
             self.reset()

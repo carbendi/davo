@@ -72,7 +72,7 @@ class DesktopController(QObject):
         if not smoke and QSystemTrayIcon.isSystemTrayAvailable():
             self.tray.show()
         window.action_panel.saved.connect(self.mapping_edited)
-        window.settings_tab.profile_loaded.connect(self.mapping_edited)
+        window.settings_tab.profile_loaded.connect(lambda: self.mapping_edited(preserve_runtime=False))
         QApplication.instance().aboutToQuit.connect(self.shutdown)
         if not smoke:
             self.worker = threading.Thread(target=self.work, daemon=True)
@@ -289,12 +289,17 @@ class DesktopController(QObject):
         elif kind == 'obs_toggle':
             {'stream': obs.client.toggle_stream, 'record': obs.client.toggle_record, 'mute_mic': obs.client.toggle_mute_mic}[action.get('toggle', 'record')]()
 
-    def mapping_edited(self):
+    def mapping_edited(self, preserve_runtime=True):
         self.cancel_macros()
-        self.engine.reset()
-        self.window._on_profile_loaded()
+        if preserve_runtime:
+            self.engine.reload_mappings()
+            self.window._populate_layer_tabs()
+        else:
+            self.engine.reset()
+            self.window._on_profile_loaded()
         self.config['profiles'][self.config['active_profile']]['layers'] = copy.deepcopy(self.config['layers'])
         cfg.save(self.config)
+        self._last_state = None
         self.refresh()
 
     def switch_profile(self, identifier):

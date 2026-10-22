@@ -114,6 +114,64 @@ class DesktopGuiTests(unittest.TestCase):
         for key, value in action.items():
             self.assertEqual(result[key], value)
 
+    def test_saving_volume_button_updates_active_mode(self):
+        controller = self.controller
+        controller.config['layers']['default']['buttons']['SHTL'] = {'action': 'dial_mode', 'mode': 'sys_vol', 'hw_mode': 'Jog', 'sensitivity': 75}
+        controller.engine.keys_changed(['SHTL'])
+        controller.engine.keys_changed([])
+        panel = self.window.action_panel
+        panel.load_button('SHTL', controller.config)
+        panel.editors[0].dial.sensitivity.setValue(35)
+        panel.save()
+        self.assertEqual(controller.engine.dial_source()['mode'], 'sys_vol')
+        self.assertEqual(controller.engine.dial_source()['sensitivity'], 35)
+
+    def test_saving_default_dial_preserves_mouse_scroll_actions(self):
+        controller = self.controller
+        original = {'action': 'hotkeys', 'hw_mode': 'Jog', 'sensitivity': 90,
+                    'left': {'action': 'mouse', 'mode': 'scroll', 'amount': 1},
+                    'right': {'action': 'mouse', 'mode': 'scroll', 'amount': -1}}
+        controller.config['layers']['default']['dial_default'] = original
+        panel = self.window.action_panel
+        panel.load_dial(controller.config)
+        panel.dial.sensitivity.setValue(40)
+        panel.save()
+        saved = controller.config['layers']['default']['dial_default']
+        self.assertEqual(saved['sensitivity'], 40)
+        self.assertEqual(saved['left'], original['left'])
+        self.assertEqual(saved['right'], original['right'])
+
+    def test_direction_editor_keeps_horizontal_scroll_and_other_actions(self):
+        from desktop_ui import DialEditor
+        editor = DialEditor()
+        source = {'action': 'hotkeys', 'left': {'action': 'mouse', 'mode': 'horizontal', 'amount': -2},
+                  'right': {'action': 'macro', 'repeat': 2, 'steps': [{'action': 'hotkey', 'keys': 'x'}]}}
+        editor.load(source)
+        saved = editor.value()
+        self.assertEqual(saved['left'], source['left'])
+        self.assertEqual(saved['right'], source['right'])
+
+    def test_profile_import_resets_dial_selection(self):
+        controller = self.controller
+        controller.config['layers']['default']['buttons']['SHTL'] = {'action': 'dial_mode', 'mode': 'sys_vol'}
+        controller.engine.keys_changed(['SHTL'])
+        controller.engine.keys_changed([])
+        self.window.settings_tab.profile_loaded.emit()
+        self.assertIsNone(controller.engine.dial_override)
+
+    def test_mapping_save_does_not_jump_editor_back_to_default_layer(self):
+        controller = self.controller
+        controller.config['layers']['other'] = {'name': 'Other', 'buttons': {}}
+        controller.engine.stack.append('other')
+        self.window._layer_id = 'other'
+        self.window._populate_layer_tabs()
+        self.window.action_panel.load_button('CUT', controller.config, 'other')
+        self.window.action_panel.editors[0].load({'action': 'hotkey', 'keys': 'ctrl+c'})
+        self.window.action_panel.save()
+        self.assertEqual(self.window._layer_id, 'other')
+        self.assertEqual(controller.engine.layer, 'other')
+        self.assertEqual(controller.config['layers']['other']['buttons']['CUT']['keys'], 'ctrl+c')
+
     def test_focus_loss_never_sends_stop_into_another_application(self):
         controller = self.controller
         controller.config['layers']['default']['dial_default'] = {'action': 'transport', 'hw_mode': 'Shuttle'}

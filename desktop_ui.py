@@ -48,6 +48,70 @@ class ShortcutInput(QWidget):
             self.text.setText(value)
 
 
+class DialDirectionEditor(QWidget):
+    """Edit shortcuts/wheel actions without losing imported direction actions."""
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+        self.kind = QComboBox()
+        for title, value in [('Keyboard shortcut', 'hotkey'), ('Vertical mouse scroll', 'scroll'),
+                              ('Horizontal mouse scroll', 'horizontal'), ('Nothing', 'none')]:
+            self.kind.addItem(title, value)
+        self.shortcut = ShortcutInput()
+        self.text = self.shortcut.text
+        self.amount = QSpinBox()
+        self.amount.setRange(-20, 20)
+        self.amount.setValue(1)
+        self.amount.setPrefix('Scroll amount: ')
+        self.existing = {}
+        layout.addWidget(self.kind)
+        layout.addWidget(self.shortcut)
+        layout.addWidget(self.amount)
+        self.kind.currentIndexChanged.connect(self.visibility)
+        self.visibility()
+
+    def visibility(self):
+        mode = self.kind.currentData()
+        self.shortcut.setVisible(mode == 'hotkey')
+        self.amount.setVisible(mode in ('scroll', 'horizontal'))
+
+    def load(self, action):
+        if isinstance(action, str):
+            action = {'action': 'hotkey', 'keys': action}
+        action = action or {}
+        self.existing = copy.deepcopy(action)
+        old = self.kind.findData('existing')
+        if old >= 0:
+            self.kind.removeItem(old)
+        mode = action.get('action', 'hotkey')
+        if mode == 'mouse' and action.get('mode') in ('scroll', 'horizontal'):
+            mode = action['mode']
+            self.amount.setValue(int(action.get('amount', 1)))
+        elif mode not in ('hotkey', 'none'):
+            mode = 'existing'
+            self.kind.addItem('Keep existing '+str(action.get('action', 'action')), mode)
+        self.text.setText(action.get('keys', ''))
+        self.kind.setCurrentIndex(max(0, self.kind.findData(mode)))
+        self.visibility()
+
+    def value(self):
+        mode = self.kind.currentData()
+        if mode == 'existing':
+            return copy.deepcopy(self.existing)
+        if mode == 'none':
+            return {'action': 'none'}
+        if mode in ('scroll', 'horizontal'):
+            if not self.amount.value():
+                raise ValueError('Scroll amount must not be zero.')
+            return dict(self.existing if self.existing.get('action') == 'mouse' else {},
+                        action='mouse', mode=mode, amount=self.amount.value())
+        from actions.hotkey import parse_hotkey
+        keys = self.text.text().strip()
+        parse_hotkey(keys)
+        return {'action': 'hotkey', 'keys': keys}
+
+
 class DialEditor(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -65,8 +129,8 @@ class DialEditor(QWidget):
         self.step = QSpinBox()
         self.step.setRange(1, 20)
         self.acceleration = QCheckBox('Faster turns make larger changes')
-        self.left = ShortcutInput()
-        self.right = ShortcutInput()
+        self.left = DialDirectionEditor()
+        self.right = DialDirectionEditor()
         form.addRow('Turn controls', self.mode)
         form.addRow('Hardware mode', self.hardware)
         form.addRow('Sensitivity', self.sensitivity)
@@ -140,14 +204,13 @@ class DialEditor(QWidget):
                 widget.setText(value)
         for direction in ('left', 'right'):
             value = action.get(direction, {})
-            getattr(self, direction).text.setText(value if isinstance(value, str) else value.get('keys', ''))
+            getattr(self, direction).load(value)
 
     def value(self):
         value = {'action': self.mode.currentData(), 'hw_mode': self.hardware.currentText(),
                  'sensitivity': self.sensitivity.value(), 'step': self.step.value(),
                  'acceleration': self.acceleration.isChecked(), 'app': self.app.text().strip(),
-                 'left': {'action': 'hotkey', 'keys': self.left.text.text().strip()},
-                 'right': {'action': 'hotkey', 'keys': self.right.text.text().strip()}}
+                 'left': self.left.value(), 'right': self.right.value()}
         if value['action'] == 'app_vol' and not value['app']:
             raise ValueError('Choose an application name or use @foreground.')
         from actions.hotkey import parse_hotkey
@@ -164,9 +227,6 @@ class DialEditor(QWidget):
                     value[key] = widget.text().strip()
             if not value['transport_app'] or any(c in value['transport_app'] for c in '/\\:'):
                 raise ValueError('Enter the editor executable name, such as Resolve.exe.')
-        if value['action'] == 'hotkeys':
-            for direction in ('left', 'right'):
-                parse_hotkey(value[direction]['keys'])
         return value
 
 
@@ -464,7 +524,8 @@ class UnifiedActionPanel(QWidget):
 
     def load_dial(self, config, layer_id='default'):
         self._config, self._layer_id, self._button_name = config, layer_id, None
-        self.title.setText('Dial: '+config['layers'][layer_id]['name'])
+        self.title.setText('Default dial: '+config['layers'][layer_id]['name'])
+        self.title.setToolTip('These settings control the default dial. For a dial function selected by a button, edit that button instead (for example SHTL for Volume).')
         self.stack.setCurrentIndex(1)
         self.dial.load(cfg.get_dial_default(config, layer_id))
         self.save_btn.setEnabled(True)
