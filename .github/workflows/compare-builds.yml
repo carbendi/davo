@@ -1,0 +1,29 @@
+name: Compare original Windows builds
+on:
+  push:
+    branches: [codex/compare-windows-builds]
+permissions:
+  contents: read
+  actions: read
+jobs:
+  compare:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/download-artifact@v4
+        with:
+          github-token: ${{ github.token }}
+          run-id: '39794353849'
+          artifact-ids: '12433525324'
+          path: comparison/old
+      - uses: actions/download-artifact@v4
+        with:
+          github-token: ${{ github.token }}
+          run-id: '39796859649'
+          artifact-ids: '12434156330'
+          path: comparison/new
+      - name: Static comparison (does not execute either EXE)
+        run: python tools/compare_original_builds.py
