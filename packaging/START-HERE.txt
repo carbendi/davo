@@ -8,6 +8,9 @@ Speed Editor Customizer for Windows 10/11 (64-bit)
    Show more options > Send to > Desktop (create shortcut).
 
 Python, PowerShell, and administrator rights are not needed to run the app.
+This version has no sign-in or cloud-sync service and does not connect to
+the original developer's API. Use Settings > Local profiles to export/import
+your mappings as local JSON files. OBS integration uses your configured host.
 The GUI opens without a controller. Connect your Speed Editor by USB or
 Bluetooth to use its buttons and dial.
 

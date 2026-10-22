@@ -36,6 +36,10 @@ To update, close the app and replace its complete folder with the newly extracte
 
 ## Features
 
+**Local profiles and privacy**
+
+This version has no account service, sign-in, cloud sync, or connections to the original developer's API. Mappings stay in your user-data folder. Use Settings → Local profiles → Export JSON / Import JSON to back up or transfer layers. The account and cloud client modules and their dependencies have been removed from the app and build configuration. OBS WebSocket integration remains available for your configured OBS instance.
+
 **Button actions**
 
 - **Hotkey** - tap a key combination (e.g. `ctrl+shift+s`)

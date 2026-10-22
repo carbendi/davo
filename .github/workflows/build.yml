@@ -73,7 +73,7 @@ jobs:
 
       - name: Install dependencies
         run: |
-          pip install PyQt6 hidapi pynput obsws-python screen-brightness-control keyring requests pyinstaller pyinstaller-hooks-contrib
+          pip install PyQt6 hidapi pynput obsws-python screen-brightness-control pyinstaller pyinstaller-hooks-contrib
 
       - name: Build
         env:
@@ -118,7 +118,7 @@ jobs:
       - name: Install dependencies (x86_64 via Rosetta 2)
         run: |
           arch -x86_64 /Library/Frameworks/Python.framework/Versions/3.12/bin/python3 -m pip install \
-            PyQt6 hidapi pynput obsws-python screen-brightness-control keyring requests pyinstaller pyinstaller-hooks-contrib
+            PyQt6 hidapi pynput obsws-python screen-brightness-control pyinstaller pyinstaller-hooks-contrib
 
       - name: Build (x86_64 / Intel)
         env:

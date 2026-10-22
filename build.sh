@@ -2,7 +2,7 @@
 set -e
 
 echo "Installing dependencies..."
-.venv/bin/python -m pip install PyQt6 hidapi pynput obsws-python screen-brightness-control keyring requests pyinstaller pyinstaller-hooks-contrib
+.venv/bin/python -m pip install PyQt6 hidapi pynput obsws-python screen-brightness-control pyinstaller pyinstaller-hooks-contrib
 
 echo ""
 echo "Building..."

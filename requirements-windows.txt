@@ -5,5 +5,3 @@ pywin32
 obsws-python
 pycaw
 screen-brightness-control
-keyring
-requests

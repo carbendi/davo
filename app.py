@@ -1,7 +1,6 @@
 # app.py — Editor Device Customizer GUI
 
 import sys
-import threading
 
 from PyQt6.QtCore import Qt, pyqtSignal, QObject
 from PyQt6.QtGui import QFont, QPainter, QColor, QBrush, QPen
@@ -19,8 +18,6 @@ import config as cfg
 from actions import obs as obs_action
 from actions import hotkey as hotkey_action
 from actions import app_switch
-import auth
-import cloud_sync
 
 
 # ---------------------------------------------------------------------------
@@ -1080,77 +1077,27 @@ class SettingsTab(QWidget):
         layout.setContentsMargins(16, 16, 16, 16)
         layout.setSpacing(12)
 
-        # ── Account ──────────────────────────────────────────────────────────
-        account_group = QGroupBox("Account")
-        account_layout = QVBoxLayout(account_group)
-
-        self._account_email = QLabel()
-        account_layout.addWidget(self._account_email)
-
-        btn_row = QHBoxLayout()
-        self._signin_btn  = QPushButton("Sign In")
-        self._signout_btn = QPushButton("Sign Out")
-        self._sync_btn    = QPushButton("Sync Now")
-        btn_row.addWidget(self._signin_btn)
-        btn_row.addWidget(self._signout_btn)
-        btn_row.addWidget(self._sync_btn)
-        account_layout.addLayout(btn_row)
-
-        self._sync_status = QLabel("")
-        account_layout.addWidget(self._sync_status)
-
-        self._signin_btn.clicked.connect(self._sign_in)
-        self._signout_btn.clicked.connect(self._sign_out)
-        self._sync_btn.clicked.connect(self._sync_now)
-
-        layout.addWidget(account_group)
-        self._refresh_account_ui()
-
-        # ── Profiles ──────────────────────────────────────────────────────────
-        profiles_group = QGroupBox("Profiles")
+        profiles_group = QGroupBox("Local profiles")
         profiles_layout = QVBoxLayout(profiles_group)
+        description = QLabel(
+            "Mappings are saved on this computer. "
+            "Export a JSON file to back up or transfer your layers."
+        )
+        description.setWordWrap(True)
+        profiles_layout.addWidget(description)
 
-        profiles_layout.addWidget(QLabel(
-            "A profile is a named snapshot of all your layers. "
-            "Profiles are saved to your account (sign in required).\n"
-            "Use Export / Import to share profiles without an account."
-        ))
-
-        self._profiles_list = QListWidget()
-        self._profiles_list.setFixedHeight(140)
-        profiles_layout.addWidget(self._profiles_list)
-
-        prof_btn_row1 = QHBoxLayout()
-        self._save_profile_btn   = QPushButton("Save Current…")
-        self._load_profile_btn   = QPushButton("Load Selected")
-        self._delete_profile_btn = QPushButton("Delete Selected")
-        prof_btn_row1.addWidget(self._save_profile_btn)
-        prof_btn_row1.addWidget(self._load_profile_btn)
-        prof_btn_row1.addWidget(self._delete_profile_btn)
-        profiles_layout.addLayout(prof_btn_row1)
-
-        prof_btn_row2 = QHBoxLayout()
-        self._refresh_profiles_btn = QPushButton("Refresh")
-        self._export_profile_btn   = QPushButton("Export JSON…")
-        self._import_profile_btn   = QPushButton("Import JSON…")
-        prof_btn_row2.addWidget(self._refresh_profiles_btn)
-        prof_btn_row2.addWidget(self._export_profile_btn)
-        prof_btn_row2.addWidget(self._import_profile_btn)
-        profiles_layout.addLayout(prof_btn_row2)
-
+        buttons = QHBoxLayout()
+        self._export_profile_btn = QPushButton("Export JSON...")
+        self._import_profile_btn = QPushButton("Import JSON...")
+        buttons.addWidget(self._export_profile_btn)
+        buttons.addWidget(self._import_profile_btn)
+        profiles_layout.addLayout(buttons)
         self._profiles_status = QLabel("")
         profiles_layout.addWidget(self._profiles_status)
-
-        self._save_profile_btn.clicked.connect(self._save_profile)
-        self._load_profile_btn.clicked.connect(self._load_profile)
-        self._delete_profile_btn.clicked.connect(self._delete_profile)
-        self._refresh_profiles_btn.clicked.connect(self._fetch_profiles)
         self._export_profile_btn.clicked.connect(self._export_profile)
         self._import_profile_btn.clicked.connect(self._import_profile)
-
         layout.addWidget(profiles_group)
 
-        # ── OBS WebSocket ─────────────────────────────────────────────────────
         obs_group = QGroupBox("OBS WebSocket")
         obs_layout = QGridLayout(obs_group)
         obs_layout.addWidget(QLabel("Host:"), 0, 0)
@@ -1169,57 +1116,6 @@ class SettingsTab(QWidget):
         self.obs_status = QLabel("Not connected")
         obs_layout.addWidget(self.obs_status, 4, 0, 1, 2)
         layout.addWidget(obs_group)
-
-    def _refresh_account_ui(self):
-        signed_in = auth.is_signed_in()
-        email = auth.get_user_email() or "Signed in"
-        self._account_email.setText(email if signed_in else "Not signed in")
-        self._signin_btn.setVisible(not signed_in)
-        self._signout_btn.setVisible(signed_in)
-        self._sync_btn.setEnabled(signed_in)
-
-    def _sign_in(self):
-        self._signin_btn.setEnabled(False)
-        self._signin_btn.setText("Opening browser…")
-
-        def _do():
-            ok = auth.sign_in()
-            self._signin_btn.setEnabled(True)
-            self._signin_btn.setText("Sign In")
-            if ok:
-                self._refresh_account_ui()
-                self._set_sync_status("Signed in. Syncing…", "gray")
-                self._sync_now()
-            else:
-                self._set_sync_status("Sign-in timed out or was cancelled.", "red")
-
-        threading.Thread(target=_do, daemon=True).start()
-
-    def _sign_out(self):
-        auth.sign_out()
-        self._refresh_account_ui()
-        self._set_sync_status("Signed out.", "gray")
-
-    def _sync_now(self):
-        if not auth.is_signed_in():
-            return
-        self._sync_btn.setEnabled(False)
-        self._set_sync_status("Syncing…", "gray")
-
-        def _do():
-            try:
-                cloud_sync.sync_from_cloud(self._config)
-                self._set_sync_status("Synced successfully.", "green")
-            except Exception as e:
-                self._set_sync_status(f"Sync failed: {e}", "red")
-            finally:
-                self._sync_btn.setEnabled(True)
-
-        threading.Thread(target=_do, daemon=True).start()
-
-    def _set_sync_status(self, text: str, color: str):
-        self._sync_status.setText(text)
-        self._sync_status.setStyleSheet(f"color: {color}")
 
     def _connect_obs(self):
         host = self.obs_host.text()
@@ -1240,109 +1136,6 @@ class SettingsTab(QWidget):
     def _set_prof_status(self, text: str, color: str = "gray"):
         self._profiles_status.setText(text)
         self._profiles_status.setStyleSheet(f"color: {color}")
-
-    def _fetch_profiles(self):
-        if not auth.is_signed_in():
-            self._set_prof_status("Sign in to view cloud profiles.", "gray")
-            return
-        self._refresh_profiles_btn.setEnabled(False)
-        self._set_prof_status("Loading…", "gray")
-
-        def _do():
-            try:
-                profiles = cloud_sync.fetch_profiles()
-                self._profiles_list.clear()
-                for p in profiles:
-                    item = QListWidgetItem(p["name"])
-                    item.setData(Qt.ItemDataRole.UserRole, p["name"])
-                    self._profiles_list.addItem(item)
-                self._set_prof_status(f"{len(profiles)} profile(s) found.", "green")
-            except Exception as e:
-                self._set_prof_status(f"Failed: {e}", "red")
-            finally:
-                self._refresh_profiles_btn.setEnabled(True)
-
-        threading.Thread(target=_do, daemon=True).start()
-
-    def _save_profile(self):
-        if not auth.is_signed_in():
-            self._set_prof_status("Sign in to save profiles.", "gray")
-            return
-        name, ok = QInputDialog.getText(self, "Save Profile", "Profile name:")
-        if not ok or not name.strip():
-            return
-        name = name.strip()
-        self._save_profile_btn.setEnabled(False)
-        self._set_prof_status("Saving…", "gray")
-
-        def _do():
-            try:
-                cloud_sync.save_profile_to_cloud(self._config, name)
-                self._set_prof_status(f"Saved '{name}'.", "green")
-                self._fetch_profiles()
-            except Exception as e:
-                self._set_prof_status(f"Save failed: {e}", "red")
-            finally:
-                self._save_profile_btn.setEnabled(True)
-
-        threading.Thread(target=_do, daemon=True).start()
-
-    def _load_profile(self):
-        item = self._profiles_list.currentItem()
-        if not item:
-            self._set_prof_status("Select a profile first.", "gray")
-            return
-        name = item.data(Qt.ItemDataRole.UserRole)
-        reply = QMessageBox.warning(
-            self, "Load Profile",
-            f"Load profile '{name}'?\n\nThis will replace ALL current layers. "
-            "Make sure you have saved or exported anything you want to keep.",
-            QMessageBox.StandardButton.Ok | QMessageBox.StandardButton.Cancel,
-        )
-        if reply != QMessageBox.StandardButton.Ok:
-            return
-        self._load_profile_btn.setEnabled(False)
-        self._set_prof_status("Loading…", "gray")
-
-        def _do():
-            try:
-                cloud_sync.load_profile_from_cloud(self._config, name)
-                self._set_prof_status(f"Loaded '{name}'.", "green")
-                self.profile_loaded.emit()
-            except Exception as e:
-                self._set_prof_status(f"Load failed: {e}", "red")
-            finally:
-                self._load_profile_btn.setEnabled(True)
-
-        threading.Thread(target=_do, daemon=True).start()
-
-    def _delete_profile(self):
-        item = self._profiles_list.currentItem()
-        if not item:
-            self._set_prof_status("Select a profile first.", "gray")
-            return
-        name = item.data(Qt.ItemDataRole.UserRole)
-        reply = QMessageBox.question(
-            self, "Delete Profile",
-            f"Delete profile '{name}' from the cloud?",
-            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
-        )
-        if reply != QMessageBox.StandardButton.Yes:
-            return
-        self._delete_profile_btn.setEnabled(False)
-        self._set_prof_status("Deleting…", "gray")
-
-        def _do():
-            try:
-                cloud_sync.delete_profile_from_cloud(name)
-                self._set_prof_status(f"Deleted '{name}'.", "green")
-                self._fetch_profiles()
-            except Exception as e:
-                self._set_prof_status(f"Delete failed: {e}", "red")
-            finally:
-                self._delete_profile_btn.setEnabled(True)
-
-        threading.Thread(target=_do, daemon=True).start()
 
     def _export_profile(self):
         import json as _json
